@@ -26,10 +26,7 @@ interface WeatherData {
   humidity: number;
   pressure: number;
   windSpeed: number;
-  windDirection: number;
   visibility: number;
-  uvIndex: number;
-  cloudCover: number;
 }
 
 const WeatherMap = () => {
@@ -132,10 +129,7 @@ const WeatherMap = () => {
             humidity: 50,
             pressure: 1013,
             windSpeed: 5,
-            windDirection: 0,
-            visibility: 10000,
-            uvIndex: 3,
-            cloudCover: 0
+            visibility: 10000
           }
         };
       })
@@ -280,7 +274,7 @@ const WeatherMap = () => {
               <div class="text-xs mt-2 space-y-1">
                 <div>💧 Precipitation: ${segment.weather.precipitation}mm/h</div>
                 <div>💨 Wind: ${Math.round(segment.weather.windSpeed)}km/h</div>
-                <div>☁️ Clouds: ${segment.weather.cloudCover}%</div>
+                <div>👁️ Visibility: ${Math.round(segment.weather.visibility/1000)}km</div>
                 <div>🕐 Arrival: ${segment.arrivalTime.toLocaleTimeString()}</div>
               </div>
             </div>
@@ -554,23 +548,11 @@ const WeatherMap = () => {
     }
   }, [departureTime, routePoints, currentRoute, generateRoute]);
 
-  const handleLocationSelect = (location: { lat: number; lng: number; address: string }) => {
-    console.log('Location selected:', location);
-    setCurrentLocation([location.lng, location.lat]);
-    
-    if (map.current) {
-      map.current.flyTo({
-        center: [location.lng, location.lat],
-        zoom: 12,
-        duration: 2000
-      });
-    }
-  };
-
   const handleApiKeySubmit = (apiKey: string) => {
     localStorage.setItem('openweather-api-key', apiKey);
     setHasApiKey(true);
   };
+
 
   // Clear route function
   const clearRoute = () => {
@@ -602,9 +584,9 @@ const WeatherMap = () => {
     <div className="relative w-full h-screen overflow-hidden">
       {!hasWeatherAPI && (
         <ApiKeySetup 
-          onApiKeySubmit={handleApiKeySubmit}
-          service="OpenWeatherMap"
-          placeholder="Enter your OpenWeatherMap API key"
+          onApiKeySet={() => {
+            setHasApiKey(true);
+          }}
         />
       )}
       
@@ -652,7 +634,17 @@ const WeatherMap = () => {
           />
           <AddressSearch
             mapboxToken={mapboxToken}
-            onLocationSelect={handleLocationSelect}
+            onLocationSelect={(lng: number, lat: number, placeName: string) => {
+              setCurrentLocation([lng, lat]);
+              if (map.current) {
+                map.current.flyTo({
+                  center: [lng, lat],
+                  zoom: 12,
+                  duration: 2000
+                });
+              }
+            }}
+            onStartNavigation={() => {}}
           />
           {routePoints.length > 0 && (
             <Button onClick={clearRoute} variant="outline" size="sm">
