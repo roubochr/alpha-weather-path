@@ -349,13 +349,7 @@ const WeatherMap: React.FC = () => {
   const addWeatherLayer = useCallback(async () => {
     if (!map.current || !showWeatherLayer) return;
 
-    const apiKey = localStorage.getItem('openweather-api-key');
-    if (!apiKey) {
-      console.log('No weather API key found');
-      return;
-    }
-
-    console.log('Adding weather layer...');
+    console.log('Adding mock weather layer...');
     
     try {
       // Remove existing layers first
@@ -366,25 +360,46 @@ const WeatherMap: React.FC = () => {
         map.current.removeSource('precipitation');
       }
 
-      // Add precipitation layer
+      // Add a simple mock precipitation layer using a color overlay
       map.current.addSource('precipitation', {
-        type: 'raster',
-        tiles: [
-          `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${apiKey}`
-        ],
-        tileSize: 256
+        type: 'geojson',
+        data: {
+          type: 'FeatureCollection',
+          features: [
+            {
+              type: 'Feature',
+              properties: { intensity: 0.3 },
+              geometry: {
+                type: 'Polygon',
+                coordinates: [[
+                  [-180, -85],
+                  [180, -85],
+                  [180, 85],
+                  [-180, 85],
+                  [-180, -85]
+                ]]
+              }
+            }
+          ]
+        }
       });
 
       map.current.addLayer({
         id: 'precipitation-layer',
-        type: 'raster',
+        type: 'fill',
         source: 'precipitation',
         paint: {
-          'raster-opacity': 0.6
+          'fill-color': [
+            'case',
+            ['>', ['random'], 0.7], '#3b82f6',  // Blue for rain
+            ['>', ['random'], 0.5], '#10b981',  // Green for light rain
+            '#f59e0b'  // Amber for clouds
+          ],
+          'fill-opacity': 0.3
         }
       });
       
-      console.log('Weather layer added successfully');
+      console.log('Mock weather layer added successfully');
     } catch (error) {
       console.error('Error adding weather layer:', error);
     }
