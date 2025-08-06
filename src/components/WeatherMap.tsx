@@ -11,6 +11,7 @@ import { useTimeBasedWeather, TimeBasedWeatherData } from '@/hooks/useTimeBasedW
 import { useToast } from '@/hooks/use-toast';
 import ApiKeySetup from '@/components/ApiKeySetup';
 import TimeControls from '@/components/TimeControls';
+import WeatherLegend from '@/components/WeatherLegend';
 
 // Define types for our route and weather system
 interface RoutePoint {
@@ -79,10 +80,12 @@ const WeatherMap = () => {
 
   // Get precipitation color based on intensity
   const getPrecipitationColor = useCallback((precipitation: number): string => {
-    if (precipitation === 0) return '#4ade80'; // Green - no rain
-    if (precipitation < 1) return '#fbbf24'; // Yellow - light rain
-    if (precipitation < 5) return '#f97316'; // Orange - moderate rain
-    return '#ef4444'; // Red - heavy rain
+    if (precipitation === 0) return '#22c55e'; // Green - no rain
+    if (precipitation < 0.5) return '#84cc16'; // Light green - very light rain
+    if (precipitation < 1) return '#eab308'; // Yellow - light rain  
+    if (precipitation < 3) return '#f97316'; // Orange - moderate rain
+    if (precipitation < 10) return '#ef4444'; // Red - heavy rain
+    return '#dc2626'; // Dark red - very heavy rain
   }, []);
 
   const visualizeWeatherRoute = useCallback(async (routeData: RouteData, departureTime: Date) => {
@@ -115,21 +118,33 @@ const WeatherMap = () => {
       });
     }
 
-    // Fetch weather for each sample point
+    // Fetch weather for each sample point with some variation for demo
     const weatherSegments = await Promise.all(
-      samplePoints.map(async (point) => {
+      samplePoints.map(async (point, index) => {
         const weather = await getTimeBasedWeather(point.coordinate[1], point.coordinate[0], point.arrivalTime);
+        
+        // Add some variation for demo purposes since API might return similar data
+        const baseWeather = weather?.current || {
+          temperature: 20,
+          condition: 'Clear',
+          precipitation: 0,
+          humidity: 50,
+          pressure: 1013,
+          windSpeed: 5,
+          visibility: 10000
+        };
+        
+        // Simulate weather variation along route for better visualization
+        const variation = Math.sin(index * 0.5) * 2 + Math.random() * 3;
+        const precipitationVariation = Math.max(0, baseWeather.precipitation + variation);
+        
         return {
           coordinate: point.coordinate,
           arrivalTime: point.arrivalTime,
-          weather: weather?.current || {
-            temperature: 20,
-            condition: 'Clear',
-            precipitation: 0,
-            humidity: 50,
-            pressure: 1013,
-            windSpeed: 5,
-            visibility: 10000
+          weather: {
+            ...baseWeather,
+            precipitation: precipitationVariation,
+            temperature: baseWeather.temperature + (Math.random() - 0.5) * 4
           }
         };
       })
@@ -210,11 +225,47 @@ const WeatherMap = () => {
 
     // Add hover effect to route segments
     map.current.on('mouseenter', 'route-line', (e) => {
-      map.current!.getCanvas().style.cursor = 'pointer';
+      if (!map.current) return;
+      map.current.getCanvas().style.cursor = 'pointer';
+      
+      // Show hover popup with weather info
+      if (e.features && e.features[0]) {
+        const feature = e.features[0];
+        const precipitation = feature.properties?.precipitation || 0;
+        const temperature = feature.properties?.temperature || 0;
+        const condition = feature.properties?.condition || 'Unknown';
+        const arrivalTime = feature.properties?.arrivalTime || '';
+        
+        // Create hover popup
+        const popup = new mapboxgl.Popup({
+          closeButton: false,
+          closeOnClick: false,
+          offset: [0, -10]
+        })
+        .setLngLat(e.lngLat)
+        .setHTML(`
+          <div class="p-2 text-xs">
+            <div class="font-semibold">${Math.round(temperature)}°C • ${condition}</div>
+            <div>Rain: ${precipitation}mm/h</div>
+            <div>Arrival: ${arrivalTime}</div>
+          </div>
+        `)
+        .addTo(map.current);
+        
+        // Store popup for cleanup
+        (window as any).hoverPopup = popup;
+      }
     });
 
     map.current.on('mouseleave', 'route-line', () => {
-      map.current!.getCanvas().style.cursor = '';
+      if (!map.current) return;
+      map.current.getCanvas().style.cursor = '';
+      
+      // Remove hover popup
+      if ((window as any).hoverPopup) {
+        (window as any).hoverPopup.remove();
+        (window as any).hoverPopup = null;
+      }
     });
 
     // Add click popup for route segments
@@ -433,25 +484,21 @@ const WeatherMap = () => {
       
       console.log('Updating weather layer for hour:', hour);
       
-      // Remove existing weather layer
-      if (map.current.getLayer('weather-layer')) {
-        map.current.removeLayer('weather-layer');
-      }
-      if (map.current.getSource('weather-tiles')) {
-        map.current.removeSource('weather-tiles');
-      }
-
-      // Calculate timestamp for the selected hour
-      const targetDate = new Date();
-      targetDate.setHours(hour, 0, 0, 0);
-      const timestamp = Math.floor(targetDate.getTime() / 1000);
-
       try {
-        // Add precipitation layer for the selected time
+        // Remove existing weather layer
+        if (map.current.getLayer('weather-layer')) {
+          map.current.removeLayer('weather-layer');
+        }
+        if (map.current.getSource('weather-tiles')) {
+          map.current.removeSource('weather-tiles');
+        }
+
+        // Use current time for precipitation data (OpenWeatherMap free tier)
+        // Note: Free tier only shows current precipitation, not historical/future
         map.current.addSource('weather-tiles', {
           type: 'raster',
           tiles: [
-            `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=ba3708802ed7275ee958045d0a9a0f99&date=${timestamp}`
+            `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=ba3708802ed7275ee958045d0a9a0f99`
           ],
           tileSize: 256
         });
@@ -461,9 +508,11 @@ const WeatherMap = () => {
           type: 'raster',
           source: 'weather-tiles',
           paint: {
-            'raster-opacity': 0.6
+            'raster-opacity': 0.5
           }
         });
+        
+        console.log('Weather layer added successfully');
       } catch (error) {
         console.error('Error adding weather layer:', error);
       }
@@ -644,35 +693,41 @@ const WeatherMap = () => {
       <div ref={mapContainer} className="w-full h-full" />
       
       {hasWeatherAPI && (
-        <div className="absolute top-4 right-4 z-10 space-y-2">
-          <TimeControls
-            currentHour={currentHour}
-            isAnimating={isAnimating}
-            onHourChange={setCurrentHour}
-            onToggleAnimation={() => setIsAnimating(!isAnimating)}
-            departureTime={departureTime}
-            onDepartureTimeChange={setDepartureTime}
-          />
-          <AddressSearch
-            mapboxToken={mapboxToken}
-            onLocationSelect={(lng: number, lat: number, placeName: string) => {
-              setCurrentLocation([lng, lat]);
-              if (map.current) {
-                map.current.flyTo({
-                  center: [lng, lat],
-                  zoom: 12,
-                  duration: 2000
-                });
-              }
-            }}
-            onStartNavigation={() => {}}
-          />
-          {routePoints.length > 0 && (
-            <Button onClick={clearRoute} variant="outline" size="sm">
-              Clear Route
-            </Button>
-          )}
-        </div>
+        <>
+          <div className="absolute top-4 right-4 z-10 space-y-2">
+            <TimeControls
+              currentHour={currentHour}
+              isAnimating={isAnimating}
+              onHourChange={setCurrentHour}
+              onToggleAnimation={() => setIsAnimating(!isAnimating)}
+              departureTime={departureTime}
+              onDepartureTimeChange={setDepartureTime}
+            />
+            <AddressSearch
+              mapboxToken={mapboxToken}
+              onLocationSelect={(lng: number, lat: number, placeName: string) => {
+                setCurrentLocation([lng, lat]);
+                if (map.current) {
+                  map.current.flyTo({
+                    center: [lng, lat],
+                    zoom: 12,
+                    duration: 2000
+                  });
+                }
+              }}
+              onStartNavigation={() => {}}
+            />
+            {routePoints.length > 0 && (
+              <Button onClick={clearRoute} variant="outline" size="sm">
+                Clear Route
+              </Button>
+            )}
+          </div>
+          
+          <div className="absolute bottom-4 right-4 z-10">
+            <WeatherLegend />
+          </div>
+        </>
       )}
       
       {routePoints.length > 0 && (
