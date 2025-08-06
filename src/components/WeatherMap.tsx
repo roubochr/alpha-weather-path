@@ -485,17 +485,21 @@ const WeatherMap = () => {
       console.log('Updating weather layer for hour:', hour);
       
       try {
-        // Remove existing weather layer
-        if (map.current.getLayer('weather-layer')) {
-          map.current.removeLayer('weather-layer');
-        }
-        if (map.current.getSource('weather-tiles')) {
-          map.current.removeSource('weather-tiles');
-        }
+        // Remove existing weather layers
+        ['weather-precipitation', 'weather-clouds'].forEach(layerId => {
+          if (map.current!.getLayer(layerId)) {
+            map.current!.removeLayer(layerId);
+          }
+        });
+        
+        ['precipitation-tiles', 'cloud-tiles'].forEach(sourceId => {
+          if (map.current!.getSource(sourceId)) {
+            map.current!.removeSource(sourceId);
+          }
+        });
 
-        // Use current time for precipitation data (OpenWeatherMap free tier)
-        // Note: Free tier only shows current precipitation, not historical/future
-        map.current.addSource('weather-tiles', {
+        // Add precipitation layer
+        map.current.addSource('precipitation-tiles', {
           type: 'raster',
           tiles: [
             `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=ba3708802ed7275ee958045d0a9a0f99`
@@ -504,15 +508,33 @@ const WeatherMap = () => {
         });
 
         map.current.addLayer({
-          id: 'weather-layer',
+          id: 'weather-precipitation',
           type: 'raster',
-          source: 'weather-tiles',
+          source: 'precipitation-tiles',
           paint: {
-            'raster-opacity': 0.5
+            'raster-opacity': 0.7
+          }
+        });
+
+        // Add clouds layer for additional weather context
+        map.current.addSource('cloud-tiles', {
+          type: 'raster',
+          tiles: [
+            `https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=ba3708802ed7275ee958045d0a9a0f99`
+          ],
+          tileSize: 256
+        });
+
+        map.current.addLayer({
+          id: 'weather-clouds',
+          type: 'raster',
+          source: 'cloud-tiles',
+          paint: {
+            'raster-opacity': 0.4
           }
         });
         
-        console.log('Weather layer added successfully');
+        console.log('Weather layers added successfully');
       } catch (error) {
         console.error('Error adding weather layer:', error);
       }
@@ -538,7 +560,7 @@ const WeatherMap = () => {
       
       map.current = new mapboxgl.Map({
         container: mapContainer.current,
-        style: 'mapbox://styles/mapbox/streets-v12',
+        style: 'mapbox://styles/mapbox/dark-v11',
         center: currentLocation,
         zoom: 10,
         pitch: 0,
@@ -624,7 +646,7 @@ const WeatherMap = () => {
   };
 
 
-  // Clear route function
+      // Clear route function
   const clearRoute = () => {
     setRoutePoints([]);
     setCurrentRoute(null);
@@ -645,6 +667,12 @@ const WeatherMap = () => {
       // Clear weather markers
       const weatherMarkers = document.querySelectorAll('[data-weather-marker="true"]');
       weatherMarkers.forEach(marker => marker.remove());
+      
+      // Clear any hover popups
+      if ((window as any).hoverPopup) {
+        (window as any).hoverPopup.remove();
+        (window as any).hoverPopup = null;
+      }
     }
   };
 
