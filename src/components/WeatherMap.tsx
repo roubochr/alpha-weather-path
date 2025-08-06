@@ -128,71 +128,38 @@ const WeatherMap = () => {
       });
     }
 
-    // Fetch weather for each sample point with time-based variation
+    // Fetch weather for each sample point with actual API data
     const weatherSegments = await Promise.all(
       samplePoints.map(async (point, index) => {
-        const weather = await getTimeBasedWeather(point.coordinate[1], point.coordinate[0], point.arrivalTime);
-        
-        // Get base weather data
-        const baseWeather = weather?.current || {
-          temperature: 20,
-          condition: 'Clear',
-          precipitation: 0,
-          humidity: 50,
-          pressure: 1013,
-          windSpeed: 5,
-          visibility: 10000
-        };
-        
-        // Create time-based weather variations based on departure time and current hour slider
-        const hoursDiff = (point.arrivalTime.getTime() - departureTime.getTime()) / (1000 * 60 * 60);
-        const timeOfDay = (departureTime.getHours() + hoursDiff) % 24;
-        
-        // Simulate realistic weather patterns based on time
-        let precipitationMultiplier = 1;
-        let tempAdjustment = 0;
-        let conditionOverride = baseWeather.condition;
-        
-        // Night time (10pm-6am) - more likely to have precipitation
-        if (timeOfDay >= 22 || timeOfDay <= 6) {
-          precipitationMultiplier = 1.5 + Math.sin(index * 0.3) * 0.8;
-          tempAdjustment = -3;
-          if (precipitationMultiplier > 1.2) conditionOverride = 'Light Rain';
-        }
-        // Early morning (6am-10am) - fog/mist conditions
-        else if (timeOfDay >= 6 && timeOfDay <= 10) {
-          precipitationMultiplier = 0.8 + Math.sin(index * 0.4) * 0.6;
-          tempAdjustment = -1;
-          if (Math.sin(index * 0.5) > 0.3) conditionOverride = 'Mist';
-        }
-        // Afternoon (12pm-6pm) - clear but potential thunderstorms
-        else if (timeOfDay >= 12 && timeOfDay <= 18) {
-          precipitationMultiplier = 0.5 + Math.sin(index * 0.2) * 1.5;
-          tempAdjustment = 2;
-          if (precipitationMultiplier > 1.8) conditionOverride = 'Thunderstorm';
-        }
-        // Evening (6pm-10pm) - moderate conditions
-        else {
-          precipitationMultiplier = 0.7 + Math.sin(index * 0.25) * 0.5;
-          tempAdjustment = 0;
+        try {
+          // Use actual weather API for each coordinate
+          const weather = await getTimeBasedWeather(point.coordinate[1], point.coordinate[0], point.arrivalTime);
+          
+          if (weather?.current) {
+            return {
+              coordinate: point.coordinate,
+              arrivalTime: point.arrivalTime,
+              weather: weather.current
+            };
+          }
+        } catch (error) {
+          console.warn(`Failed to get weather for point ${index}:`, error);
         }
         
-        // Add route position variation (weather changes along the route)
-        const routePosition = index / samplePoints.length;
-        const positionVariation = Math.sin(routePosition * Math.PI * 3) * 2;
-        
-        const finalPrecipitation = Math.max(0, 
-          baseWeather.precipitation * precipitationMultiplier + positionVariation
-        );
-        
+        // Fallback to default weather if API fails
         return {
           coordinate: point.coordinate,
           arrivalTime: point.arrivalTime,
           weather: {
-            ...baseWeather,
-            precipitation: finalPrecipitation,
-            temperature: baseWeather.temperature + tempAdjustment + (Math.random() - 0.5) * 2,
-            condition: conditionOverride
+            temperature: 20,
+            condition: 'Clear',
+            precipitation: 0,
+            humidity: 50,
+            pressure: 1013,
+            windSpeed: 5,
+            visibility: 10000,
+            description: 'clear sky',
+            icon: '01d'
           }
         };
       })

@@ -127,7 +127,11 @@ export const useTimeBasedWeather = () => {
       const timeToPoint = routeDuration * progressRatio * 1000; // Convert to milliseconds
       const arrivalTime = new Date(departureTime.getTime() + timeToPoint);
       
-      const coordKey = `${coord[0]},${coord[1]}`;
+      // Round coordinates to match API precision
+      const roundedLat = Math.round(coord[1] * 1000) / 1000;
+      const roundedLon = Math.round(coord[0] * 1000) / 1000;
+      const coordKey = `${roundedLon},${roundedLat}`;
+      
       const hourlyForecast = hourlyForecasts[coordKey];
       
       if (hourlyForecast) {
@@ -136,10 +140,43 @@ export const useTimeBasedWeather = () => {
         
         if (weather) {
           results.push({
-            coordinate: coord,
+            coordinate: [roundedLon, roundedLat],
             weather,
             arrivalTime
           });
+        }
+      } else {
+        // If no forecast data, try to interpolate from nearby points
+        const nearbyForecasts = Object.entries(hourlyForecasts);
+        if (nearbyForecasts.length > 0) {
+          // Find closest coordinate
+          let closestForecast = null;
+          let minDistance = Infinity;
+          
+          nearbyForecasts.forEach(([key, forecast]) => {
+            const [lon, lat] = key.split(',').map(Number);
+            const distance = Math.sqrt(
+              Math.pow(lon - roundedLon, 2) + Math.pow(lat - roundedLat, 2)
+            );
+            
+            if (distance < minDistance) {
+              minDistance = distance;
+              closestForecast = forecast;
+            }
+          });
+          
+          if (closestForecast) {
+            const arrivalHour = arrivalTime.getHours();
+            const weather = getWeatherAtTime(closestForecast, arrivalHour);
+            
+            if (weather) {
+              results.push({
+                coordinate: [roundedLon, roundedLat],
+                weather,
+                arrivalTime
+              });
+            }
+          }
         }
       }
     });
