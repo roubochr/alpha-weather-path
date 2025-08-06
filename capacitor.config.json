@@ -1,11 +1,8 @@
 {
-  "appId": "app.lovable.fa9a2d69518c4cf3a9679c23e2d4f99f",
-  "appName": "alpha-weather-path",
+  "appId": "com.weatherpath.app",
+  "appName": "WeatherPath",
   "webDir": "dist",
-  "server": {
-    "url": "https://fa9a2d69-518c-4cf3-a967-9c23e2d4f99f.lovableproject.com?forceHideBadge=true",
-    "cleartext": true
-  },
+  "bundledWebRuntime": false,
   "plugins": {
     "SplashScreen": {
       "launchShowDuration": 3000,
