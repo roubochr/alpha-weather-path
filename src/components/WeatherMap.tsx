@@ -389,13 +389,8 @@ const WeatherMap: React.FC = () => {
         type: 'fill',
         source: 'precipitation',
         paint: {
-          'fill-color': [
-            'case',
-            ['>', ['random'], 0.7], '#3b82f6',  // Blue for rain
-            ['>', ['random'], 0.5], '#10b981',  // Green for light rain
-            '#f59e0b'  // Amber for clouds
-          ],
-          'fill-opacity': 0.3
+          'fill-color': '#3b82f6',
+          'fill-opacity': 0.2
         }
       });
       
