@@ -23,7 +23,7 @@ interface RoutePoint {
   marker?: mapboxgl.Marker;
 }
 
-const WeatherMap = () => {
+const WeatherMap: React.FC = () => {
   console.log('WeatherMap component rendering...');
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);

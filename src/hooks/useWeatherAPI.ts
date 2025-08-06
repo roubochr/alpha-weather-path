@@ -32,6 +32,7 @@ export const useWeatherAPI = () => {
   const [error, setError] = useState<string | null>(null);
 
   const getWeatherData = async (lat: number, lon: number): Promise<WeatherResponse | null> => {
+    console.log('Starting weather data fetch...');
     setLoading(true);
     setError(null);
 
