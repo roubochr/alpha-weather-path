@@ -327,124 +327,76 @@ const WeatherMap: React.FC = () => {
     return '#10b981'; // Green for no rain
   };
 
-  const updateRouteColors = useCallback(async () => {
-    if (!map.current || !currentRoute || route.length < 2) return;
+  // Simplified weather layer management
+  const addWeatherLayer = useCallback(async () => {
+    if (!map.current || !showWeatherLayer) return;
 
     const apiKey = localStorage.getItem('openweather-api-key');
-    if (!apiKey) return;
+    if (!apiKey) {
+      console.log('No weather API key found');
+      return;
+    }
 
+    console.log('Adding weather layer...');
+    
     try {
-      // Get weather data for route coordinates
-      const coordinateWeatherPromises = currentRoute.geometry.coordinates.map(async (coord, index) => {
-        // Sample every 10th coordinate to avoid too many API calls
-        if (index % 10 !== 0 && index !== currentRoute.geometry.coordinates.length - 1) {
-          return null;
-        }
-        
-        const weatherData = await getTimeBasedWeather(coord[1], coord[0]);
-        return weatherData ? { coordinate: coord, weather: weatherData } : null;
-      });
-
-      const weatherResults = await Promise.all(coordinateWeatherPromises);
-      const validWeatherResults = weatherResults.filter(result => result !== null);
-
-      if (validWeatherResults.length === 0) return;
-
-      // Calculate arrival times and weather conditions
-      const segments: RouteSegment[] = [];
-      
-      for (let i = 0; i < validWeatherResults.length - 1; i++) {
-        const startResult = validWeatherResults[i];
-        const endResult = validWeatherResults[i + 1];
-        
-        if (!startResult || !endResult) continue;
-
-        const segmentStart = currentRoute.geometry.coordinates.indexOf(startResult.coordinate);
-        const segmentEnd = currentRoute.geometry.coordinates.indexOf(endResult.coordinate);
-        
-        const segmentCoords = currentRoute.geometry.coordinates.slice(segmentStart, segmentEnd + 1);
-        
-        // Calculate arrival time at this segment
-        const progressRatio = segmentStart / currentRoute.geometry.coordinates.length;
-        const timeToSegment = currentRoute.duration * progressRatio * 1000;
-        const arrivalTime = new Date(departureTime.getTime() + timeToSegment);
-        
-        // Get weather for arrival time
-        const arrivalHour = arrivalTime.getHours();
-        const weather = startResult.weather.hourlyForecast[arrivalHour] || startResult.weather.current;
-        
-        const rainIntensity = Math.min(weather.precipitation * 10 + weather.humidity / 2, 100);
-        
-        segments.push({
-          coordinates: segmentCoords as [number, number][],
-          rainIntensity,
-          arrivalTime
-        });
+      // Remove existing layers first
+      if (map.current.getLayer('precipitation-layer')) {
+        map.current.removeLayer('precipitation-layer');
+      }
+      if (map.current.getSource('precipitation')) {
+        map.current.removeSource('precipitation');
       }
 
-      setRouteSegments(segments);
-
-      // Remove existing colored route layers
-      const existingLayers = ['route-segment-0', 'route-segment-1', 'route-segment-2', 'route-segment-3', 'route-segment-4'];
-      existingLayers.forEach(layerId => {
-        try {
-          if (map.current?.getLayer(layerId)) {
-            map.current.removeLayer(layerId);
-          }
-          if (map.current?.getSource(layerId)) {
-            map.current.removeSource(layerId);
-          }
-        } catch (error) {
-          console.warn(`Could not remove layer ${layerId}`);
-        }
+      // Add precipitation layer
+      map.current.addSource('precipitation', {
+        type: 'raster',
+        tiles: [
+          `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${apiKey}`
+        ],
+        tileSize: 256
       });
 
-      // Add colored route segments
-      segments.forEach((segment, index) => {
-        const sourceId = `route-segment-${index}`;
-        const layerId = `route-segment-${index}`;
-
-        if (map.current && segment.coordinates.length > 1) {
-          map.current.addSource(sourceId, {
-            type: 'geojson',
-            data: {
-              type: 'Feature',
-              properties: {},
-              geometry: {
-                type: 'LineString',
-                coordinates: segment.coordinates
-              }
-            }
-          });
-
-          map.current.addLayer({
-            id: layerId,
-            type: 'line',
-            source: sourceId,
-            layout: {
-              'line-join': 'round',
-              'line-cap': 'round'
-            },
-            paint: {
-              'line-color': getRainColor(segment.rainIntensity),
-              'line-width': 8,
-              'line-opacity': 0.9
-            }
-          });
+      map.current.addLayer({
+        id: 'precipitation-layer',
+        type: 'raster',
+        source: 'precipitation',
+        paint: {
+          'raster-opacity': 0.6
         }
       });
-
+      
+      console.log('Weather layer added successfully');
     } catch (error) {
-      console.error('Error updating route colors:', error);
+      console.error('Error adding weather layer:', error);
     }
-  }, [currentRoute, departureTime, getTimeBasedWeather, route.length]);
+  }, [showWeatherLayer]);
 
-  // Update route colors when departure time or route changes
-  useEffect(() => {
-    if (currentRoute && route.length >= 2) {
-      updateRouteColors();
+  const removeWeatherLayer = useCallback(() => {
+    if (!map.current) return;
+    
+    console.log('Removing weather layer...');
+    try {
+      if (map.current.getLayer('precipitation-layer')) {
+        map.current.removeLayer('precipitation-layer');
+      }
+      if (map.current.getSource('precipitation')) {
+        map.current.removeSource('precipitation');
+      }
+      console.log('Weather layer removed successfully');
+    } catch (error) {
+      console.error('Error removing weather layer:', error);
     }
-  }, [currentRoute, departureTime, updateRouteColors]);
+  }, []);
+
+  // Toggle weather layer when switch changes
+  useEffect(() => {
+    if (showWeatherLayer) {
+      addWeatherLayer();
+    } else {
+      removeWeatherLayer();
+    }
+  }, [showWeatherLayer, addWeatherLayer, removeWeatherLayer]);
 
   const clearRoute = useCallback(() => {
     // Remove all route markers
@@ -458,8 +410,24 @@ const WeatherMap: React.FC = () => {
     weatherMarkers.forEach(marker => marker.remove());
     setWeatherMarkers([]);
     
+    // Remove route from map
+    if (map.current) {
+      try {
+        if (map.current.getLayer('route')) {
+          map.current.removeLayer('route');
+        }
+        if (map.current.getSource('route')) {
+          map.current.removeSource('route');
+        }
+      } catch (error) {
+        console.warn('Could not remove route from map');
+      }
+    }
+    
     setRoute([]);
     setRouteWeather([]);
+    setCurrentRoute(null);
+    setRouteSegments([]);
   }, [route, weatherMarkers]);
 
   const planOptimalRoute = useCallback(async () => {
@@ -473,34 +441,54 @@ const WeatherMap: React.FC = () => {
       setCurrentRoute(routeData);
       
       // Remove existing route layers
-      const existingLayers = ['route', 'route-segment-0', 'route-segment-1', 'route-segment-2', 'route-segment-3', 'route-segment-4'];
-      existingLayers.forEach(layerId => {
-        try {
-          if (map.current?.getLayer(layerId)) {
-            map.current.removeLayer(layerId);
+      try {
+        if (map.current.getLayer('route')) {
+          map.current.removeLayer('route');
+        }
+        if (map.current.getSource('route')) {
+          map.current.removeSource('route');
+        }
+      } catch (error) {
+        console.warn('Could not remove existing route layer');
+      }
+
+      // Add basic route first (always visible)
+      map.current.addSource('route', {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'LineString',
+            coordinates: routeData.geometry.coordinates
           }
-          if (map.current?.getSource(layerId)) {
-            map.current.removeSource(layerId);
-          }
-        } catch (error) {
-          console.warn(`Could not remove layer ${layerId}`);
         }
       });
 
-      // Fit map to route bounds first
+      map.current.addLayer({
+        id: 'route',
+        type: 'line',
+        source: 'route',
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round'
+        },
+        paint: {
+          'line-color': '#3b82f6',
+          'line-width': 6,
+          'line-opacity': 0.8
+        }
+      });
+
+      // Fit map to route bounds
       const coordinates_flat = routeData.geometry.coordinates;
       const bounds = coordinates_flat.reduce((bounds, coord) => {
         return bounds.extend(coord as [number, number]);
       }, new mapboxgl.LngLatBounds(coordinates_flat[0], coordinates_flat[0]));
       
       map.current.fitBounds(bounds, { padding: 50 });
-      
-      // Update route colors with weather data
-      setTimeout(() => {
-        updateRouteColors();
-      }, 500);
     }
-  }, [route, getRoute, updateRouteColors]);
+  }, [route, getRoute]);
 
   const startNavigation = useCallback(() => {
     if (currentRoute) {
@@ -679,32 +667,14 @@ const WeatherMap: React.FC = () => {
                 <span className="font-semibold">Route Points: {route.length}</span>
               </div>
               <p className="text-sm text-muted-foreground">Click on map to add waypoints</p>
-              {routeSegments.length > 0 && (
-                <div className="mt-2 space-y-1">
-                  <div className="text-xs font-medium">Route Weather Legend:</div>
-                  <div className="flex items-center space-x-2 text-xs">
-                    <div className="w-3 h-3 bg-green-500 rounded"></div>
-                    <span>No Rain</span>
-                    <div className="w-3 h-3 bg-blue-500 rounded"></div>
-                    <span>Light</span>
-                    <div className="w-3 h-3 bg-amber-500 rounded"></div>
-                    <span>Moderate</span>
-                    <div className="w-3 h-3 bg-red-500 rounded"></div>
-                    <span>Heavy</span>
-                  </div>
+              {currentRoute && (
+                <div className="mt-2 text-xs">
+                  <div>Distance: {(currentRoute.distance / 1000).toFixed(1)} km</div>
+                  <div>Duration: {Math.round(currentRoute.duration / 60)} min</div>
                 </div>
               )}
             </div>
           )}
-          
-          {/* Precipitation Overlay */}
-          <PrecipitationOverlay
-            map={map.current}
-            isVisible={showWeatherLayer}
-            currentHour={currentHour}
-            isAnimating={isAnimating}
-            apiKey={localStorage.getItem('openweather-api-key') || ''}
-          />
         </div>
 
         {/* Navigation Panel */}
