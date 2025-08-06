@@ -9,6 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { CloudRain, MapPin, Route, AlertTriangle, Layers, Navigation } from 'lucide-react';
 import { useWeatherAPI, WeatherData } from '@/hooks/useWeatherAPI';
+import { useMockWeather } from '@/hooks/useMockWeather';
 import { useRouting, RouteData } from '@/hooks/useRouting';
 import { useTimeBasedWeather } from '@/hooks/useTimeBasedWeather';
 import SecretForm from './SecretForm';
@@ -60,15 +61,7 @@ const WeatherMap: React.FC = () => {
   const [routeWeather, setRouteWeather] = useState<RoutePoint[]>([]);
   const [showWeatherLayer, setShowWeatherLayer] = useState(false);
   const [weatherMarkers, setWeatherMarkers] = useState<mapboxgl.Marker[]>([]);
-  const [hasWeatherAPI, setHasWeatherAPI] = useState(() => {
-    const stored = localStorage.getItem('openweather-api-key');
-    // Clear invalid API key if it's a URL
-    if (stored && stored.startsWith('http')) {
-      localStorage.removeItem('openweather-api-key');
-      return false;
-    }
-    return !!stored;
-  });
+  const [hasWeatherAPI, setHasWeatherAPI] = useState(true); // Always enable weather features
   const [currentRoute, setCurrentRoute] = useState<RouteData | null>(null);
   const [isNavigating, setIsNavigating] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
@@ -78,6 +71,7 @@ const WeatherMap: React.FC = () => {
   const [departureTime, setDepartureTime] = useState(() => new Date());
   const [routeSegments, setRouteSegments] = useState<RouteSegment[]>([]);
   const { getWeatherData, loading } = useWeatherAPI();
+  const { getMockWeatherData } = useMockWeather();
   const { getRoute, loading: routeLoading } = useRouting(mapboxToken);
   const { getTimeBasedWeather, calculateArrivalWeather } = useTimeBasedWeather();
 
@@ -302,9 +296,12 @@ const WeatherMap: React.FC = () => {
     const newPoint: RoutePoint = { lng: roundedLng, lat: roundedLat, marker };
     setRoute(prev => [...prev, newPoint]);
 
-    // Get real weather data for the point using rounded coordinates
+    // Get weather data (real or mock)
     console.log('Fetching weather data for point...');
-    const weatherData = await getWeatherData(roundedLat, roundedLng);
+    const hasAPIKey = !!localStorage.getItem('openweather-api-key');
+    const weatherData = hasAPIKey 
+      ? await getWeatherData(roundedLat, roundedLng)
+      : await getMockWeatherData(roundedLat, roundedLng);
     console.log('Weather data received:', weatherData);
     
     if (weatherData) {
