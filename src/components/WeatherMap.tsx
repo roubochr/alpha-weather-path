@@ -25,8 +25,14 @@ interface RoutePoint {
 const WeatherMap = () => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
-  const [mapboxToken, setMapboxToken] = useState('');
-  const [showTokenInput, setShowTokenInput] = useState(true);
+  const [mapboxToken, setMapboxToken] = useState(() => {
+    // Persist token in localStorage for Safari iOS
+    return localStorage.getItem('mapbox-token') || '';
+  });
+  const [showTokenInput, setShowTokenInput] = useState(() => {
+    // Only show input if no token is stored
+    return !localStorage.getItem('mapbox-token');
+  });
   const [route, setRoute] = useState<RoutePoint[]>([]);
   const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
   const [routeWeather, setRouteWeather] = useState<RoutePoint[]>([]);
@@ -110,6 +116,18 @@ const WeatherMap = () => {
           map.current.on('click', (e) => {
             addRoutePoint(e.lngLat.lng, e.lngLat.lat);
           });
+        }
+      });
+
+      // Handle map style loading errors
+      map.current.on('error', (e) => {
+        console.error('Map error:', e.error);
+        if (e.error.message.includes('401')) {
+          console.error('Invalid Mapbox token - please check your token');
+          alert('Invalid Mapbox token. Please check your token and try again.');
+          // Clear the invalid token
+          localStorage.removeItem('mapbox-token');
+          setShowTokenInput(true);
         }
       });
       
@@ -221,7 +239,11 @@ const WeatherMap = () => {
               onChange={(e) => setMapboxToken(e.target.value)}
             />
             <Button 
-              onClick={() => setShowTokenInput(false)}
+              onClick={() => {
+                // Save token to localStorage for persistence
+                localStorage.setItem('mapbox-token', mapboxToken);
+                setShowTokenInput(false);
+              }}
               disabled={!mapboxToken}
               className="w-full"
             >
