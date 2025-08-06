@@ -9,7 +9,10 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { CloudRain, MapPin, Route, AlertTriangle, Layers, Navigation } from 'lucide-react';
 import { useWeatherAPI, WeatherData } from '@/hooks/useWeatherAPI';
+import { useRouting, RouteData } from '@/hooks/useRouting';
 import SecretForm from './SecretForm';
+import AddressSearch from './AddressSearch';
+import NavigationPanel from './NavigationPanel';
 
 
 interface RoutePoint {
@@ -40,38 +43,83 @@ const WeatherMap = () => {
   const [hasWeatherAPI, setHasWeatherAPI] = useState(() => {
     return !!localStorage.getItem('openweather-api-key');
   });
+  const [currentRoute, setCurrentRoute] = useState<RouteData | null>(null);
+  const [isNavigating, setIsNavigating] = useState(false);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const { getWeatherData, loading } = useWeatherAPI();
+  const { getRoute, loading: routeLoading } = useRouting(mapboxToken);
 
-  // Get current location with Safari iOS compatibility
+  // Enhanced GPS tracking for navigation
   useEffect(() => {
-    console.log('Attempting to get current location...');
+    console.log('Setting up GPS tracking...');
     
-    // For Safari iOS, use a more conservative approach
-    if ('geolocation' in navigator) {
-      const options = {
-        enableHighAccuracy: false, // Less demanding for Safari iOS
-        timeout: 5000, // Shorter timeout
-        maximumAge: 300000 // 5 minutes cache
-      };
-      
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          console.log('Location obtained:', position.coords);
-          setCurrentLocation([position.coords.longitude, position.coords.latitude]);
-        },
-        (error) => {
-          console.error('Geolocation error:', error.message);
-          console.log('Using default location (New York)');
-          // Default to New York if geolocation fails
-          setCurrentLocation([-74.006, 40.7128]);
-        },
-        options
-      );
-    } else {
-      console.log('Geolocation not supported, using default location');
-      setCurrentLocation([-74.006, 40.7128]);
-    }
-  }, []);
+    const watchId = navigator.geolocation?.watchPosition(
+      (position) => {
+        const newLocation: [number, number] = [
+          position.coords.longitude, 
+          position.coords.latitude
+        ];
+        setUserLocation(newLocation);
+        
+        // Set initial location if not set
+        if (!currentLocation) {
+          setCurrentLocation(newLocation);
+        }
+        
+        // Update user location marker on map
+        if (map.current) {
+          // Remove existing user location marker
+          const existingMarker = document.querySelector('[data-user-location="true"]');
+          if (existingMarker) {
+            existingMarker.remove();
+          }
+          
+          // Add new user location marker
+          new mapboxgl.Marker({ 
+            color: '#10b981',
+            element: (() => {
+              const el = document.createElement('div');
+              el.setAttribute('data-user-location', 'true');
+              el.className = 'w-4 h-4 bg-green-500 rounded-full border-2 border-white shadow-lg';
+              return el;
+            })()
+          })
+            .setLngLat(newLocation)
+            .addTo(map.current);
+        }
+      },
+      (error) => {
+        console.error('GPS tracking error:', error);
+        // Fallback to one-time location
+        navigator.geolocation?.getCurrentPosition(
+          (position) => {
+            const fallbackLocation: [number, number] = [
+              position.coords.longitude, 
+              position.coords.latitude
+            ];
+            setCurrentLocation(fallbackLocation);
+            setUserLocation(fallbackLocation);
+          },
+          () => {
+            console.log('Using default location (New York)');
+            setCurrentLocation([-74.006, 40.7128]);
+          }
+        );
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 30000
+      }
+    );
+
+    return () => {
+      if (watchId !== undefined) {
+        navigator.geolocation?.clearWatch(watchId);
+      }
+    };
+  }, [currentLocation]);
 
   // Initialize map
   useEffect(() => {
@@ -281,43 +329,82 @@ const WeatherMap = () => {
   const planOptimalRoute = useCallback(async () => {
     if (route.length < 2) return;
 
-    // Create a route line on the map
-    if (map.current) {
-      const coordinates = route.map(point => [point.lng, point.lat]);
+    console.log('Planning route for points:', route);
+    const coordinates = route.map(point => [point.lng, point.lat] as [number, number]);
+    
+    const routeData = await getRoute(coordinates);
+    if (routeData && map.current) {
+      setCurrentRoute(routeData);
       
-      const geojson = {
-        type: 'Feature' as const,
-        properties: {},
-        geometry: {
-          type: 'LineString' as const,
-          coordinates
-        }
-      };
-
+      // Remove existing route if any
       if (map.current.getSource('route')) {
-        (map.current.getSource('route') as mapboxgl.GeoJSONSource).setData(geojson);
-      } else {
-        map.current.addSource('route', {
-          type: 'geojson',
-          data: geojson
-        });
-
-        map.current.addLayer({
-          id: 'route',
-          type: 'line',
-          source: 'route',
-          layout: {
-            'line-join': 'round',
-            'line-cap': 'round'
-          },
-          paint: {
-            'line-color': '#3b82f6',
-            'line-width': 4
-          }
-        });
+        map.current.removeLayer('route');
+        map.current.removeSource('route');
       }
+
+      // Add the route to the map
+      map.current.addSource('route', {
+        type: 'geojson',
+        data: {
+          type: 'Feature',
+          properties: {},
+          geometry: {
+            type: 'LineString',
+            coordinates: routeData.geometry.coordinates
+          }
+        }
+      });
+
+      map.current.addLayer({
+        id: 'route',
+        type: 'line',
+        source: 'route',
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round'
+        },
+        paint: {
+          'line-color': '#3b82f6',
+          'line-width': 6,
+          'line-opacity': 0.8
+        }
+      });
+
+      // Fit map to route bounds
+      const coordinates_flat = routeData.geometry.coordinates;
+      const bounds = coordinates_flat.reduce((bounds, coord) => {
+        return bounds.extend(coord as [number, number]);
+      }, new mapboxgl.LngLatBounds(coordinates_flat[0], coordinates_flat[0]));
+      
+      map.current.fitBounds(bounds, { padding: 50 });
     }
-  }, [route]);
+  }, [route, getRoute]);
+
+  const startNavigation = useCallback(() => {
+    if (currentRoute) {
+      setIsNavigating(true);
+      setCurrentStep(0);
+    }
+  }, [currentRoute]);
+
+  const stopNavigation = useCallback(() => {
+    setIsNavigating(false);
+    setCurrentStep(0);
+  }, []);
+
+  const handleLocationSelect = useCallback(async (lng: number, lat: number, placeName: string) => {
+    console.log('Location selected:', { lng, lat, placeName });
+    await addRoutePoint(lng, lat);
+    
+    // Center map on selected location
+    if (map.current) {
+      map.current.flyTo({
+        center: [lng, lat],
+        zoom: 14,
+        duration: 1000
+      });
+    }
+  }, [addRoutePoint]);
 
   const getWeatherColor = (condition: string) => {
     switch (condition) {
@@ -386,12 +473,22 @@ const WeatherMap = () => {
 
   return (
     <div className="h-screen flex flex-col bg-background">
-      {/* Header */}
+      {/* Header with Address Search */}
       <div className="bg-card border-b border-border p-4">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-2">
             <CloudRain className="h-6 w-6 text-primary" />
             <h1 className="text-xl font-bold">Weather Route Planner</h1>
+          </div>
+        </div>
+        
+        <div className="flex items-center justify-between">
+          <div className="flex-1 mr-4">
+            <AddressSearch 
+              onLocationSelect={handleLocationSelect}
+              onStartNavigation={startNavigation}
+              mapboxToken={mapboxToken}
+            />
           </div>
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
@@ -402,19 +499,24 @@ const WeatherMap = () => {
               />
               <Label htmlFor="weather-layer" className="flex items-center space-x-1">
                 <Layers className="h-4 w-4" />
-                <span>Weather Layer</span>
+                <span>Weather</span>
               </Label>
             </div>
             <div className="flex space-x-2">
               {route.length >= 2 && (
-                <Button variant="outline" size="sm" onClick={planOptimalRoute}>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={planOptimalRoute}
+                  disabled={routeLoading}
+                >
                   <Navigation className="h-4 w-4 mr-2" />
-                  Plan Route
+                  {routeLoading ? 'Planning...' : 'Plan Route'}
                 </Button>
               )}
               <Button variant="outline" size="sm" onClick={clearRoute}>
                 <Route className="h-4 w-4 mr-2" />
-                Clear Route
+                Clear
               </Button>
             </div>
           </div>
@@ -438,8 +540,19 @@ const WeatherMap = () => {
           )}
         </div>
 
+        {/* Navigation Panel */}
+        {currentRoute && (
+          <NavigationPanel
+            route={currentRoute}
+            currentStep={currentStep}
+            isNavigating={isNavigating}
+            onStartNavigation={startNavigation}
+            onStopNavigation={stopNavigation}
+          />
+        )}
+
         {/* Weather Panel */}
-        {routeWeather.length > 0 && (
+        {!currentRoute && routeWeather.length > 0 && (
           <div className="w-80 bg-card border-l border-border overflow-y-auto">
             <div className="p-4 border-b border-border">
               <h2 className="font-semibold flex items-center">
