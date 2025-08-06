@@ -33,30 +33,52 @@ const WeatherMap = () => {
 
   // Get current location
   useEffect(() => {
+    console.log('Attempting to get current location...');
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        console.log('Location obtained:', position.coords);
         setCurrentLocation([position.coords.longitude, position.coords.latitude]);
       },
       (error) => {
         console.error('Error getting location:', error);
+        console.log('Using default location (New York)');
         // Default to New York if geolocation fails
         setCurrentLocation([-74.006, 40.7128]);
-      }
+      },
+      { timeout: 10000 } // Add timeout
     );
   }, []);
 
   // Initialize map
   useEffect(() => {
-    if (!mapContainer.current || !mapboxToken || !currentLocation) return;
+    console.log('Map initialization check:', { 
+      hasContainer: !!mapContainer.current, 
+      hasToken: !!mapboxToken, 
+      hasLocation: !!currentLocation 
+    });
+    
+    if (!mapContainer.current || !mapboxToken || !currentLocation) {
+      console.log('Map initialization skipped - missing requirements');
+      return;
+    }
 
+    console.log('Initializing map with token and location:', { mapboxToken: mapboxToken.substring(0, 10) + '...', currentLocation });
+    
     mapboxgl.accessToken = mapboxToken;
 
-    map.current = new mapboxgl.Map({
-      container: mapContainer.current,
-      style: 'mapbox://styles/mapbox/dark-v11',
-      center: currentLocation,
-      zoom: 10,
-    });
+    try {
+      map.current = new mapboxgl.Map({
+        container: mapContainer.current,
+        style: 'mapbox://styles/mapbox/dark-v11',
+        center: currentLocation,
+        zoom: 10,
+      });
+
+      console.log('Map created successfully');
+    } catch (error) {
+      console.error('Error creating map:', error);
+      return;
+    }
 
     // Add navigation controls
     map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
