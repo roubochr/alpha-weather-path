@@ -48,21 +48,11 @@ const WeatherMap: React.FC = () => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const [mapboxToken, setMapboxToken] = useState(() => {
-    const stored = localStorage.getItem('mapbox-token');
-    // Check if stored token is actually a valid token (not a URL)
-    if (stored && !stored.startsWith('http')) {
-      return stored;
-    }
-    // Clear invalid token
-    if (stored) {
-      localStorage.removeItem('mapbox-token');
-    }
+    // Clear any potentially invalid tokens on startup
+    localStorage.removeItem('mapbox-token');
     return '';
   });
-  const [showTokenInput, setShowTokenInput] = useState(() => {
-    const stored = localStorage.getItem('mapbox-token');
-    return !stored || stored.startsWith('http');
-  });
+  const [showTokenInput, setShowTokenInput] = useState(true);
   const [route, setRoute] = useState<RoutePoint[]>([]);
   const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
   const [routeWeather, setRouteWeather] = useState<RoutePoint[]>([]);
