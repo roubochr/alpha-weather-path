@@ -86,7 +86,7 @@ const PrecipitationOverlay: React.FC<PrecipitationOverlayProps> = ({
   };
 
   const updatePrecipitationLayer = () => {
-    if (!map || !apiKey || !isVisible) return;
+    if (!map || !apiKey || !isVisible || !map.isStyleLoaded()) return;
 
     console.log('Updating precipitation layer for hour:', timeRef.current);
     
@@ -94,24 +94,38 @@ const PrecipitationOverlay: React.FC<PrecipitationOverlayProps> = ({
       // Remove existing precipitation layers
       removeAllLayers();
 
-      // Add precipitation layer with current time
-      map.addSource('precipitation', {
-        type: 'raster',
-        tiles: [
-          `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${apiKey}`
-        ],
-        tileSize: 256
-      });
+      // Wait a bit for style to be ready
+      setTimeout(() => {
+        if (!map || !map.isStyleLoaded()) return;
 
-      map.addLayer({
-        id: 'precipitation-layer',
-        type: 'raster',
-        source: 'precipitation',
-        paint: {
-          'raster-opacity': 0.6,
-          'raster-fade-duration': 300
+        // Add precipitation layer with current time
+        if (!map.getSource('precipitation')) {
+          map.addSource('precipitation', {
+            type: 'raster',
+            tiles: [
+              `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${apiKey}`
+            ],
+            tileSize: 256,
+            minzoom: 0,
+            maxzoom: 18
+          });
         }
-      });
+
+        if (!map.getLayer('precipitation-layer')) {
+          map.addLayer({
+            id: 'precipitation-layer',
+            type: 'raster',
+            source: 'precipitation',
+            paint: {
+              'raster-opacity': 0.7,
+              'raster-fade-duration': 300,
+              'raster-brightness-min': 0.1,
+              'raster-brightness-max': 1.0,
+              'raster-contrast': 0.3
+            }
+          });
+        }
+      }, 100);
 
     } catch (error) {
       console.error('Error updating precipitation layer:', error);

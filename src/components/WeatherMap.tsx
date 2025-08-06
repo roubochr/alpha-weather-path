@@ -663,11 +663,25 @@ const WeatherMap = () => {
 
         // Add marker for the clicked point
         if (map.current && map.current.isStyleLoaded()) {
-          const markerColor = routePoints.length === 0 ? '#22c55e' : '#ef4444';
           const markerElement = document.createElement('div');
-          markerElement.innerHTML = routePoints.length === 0 ? '🏁' : '🎯';
-          markerElement.style.fontSize = '24px';
-          markerElement.style.cursor = 'pointer';
+          markerElement.className = 'route-marker';
+          markerElement.style.cssText = `
+            width: 32px;
+            height: 32px;
+            background-color: ${routePoints.length === 0 ? '#22c55e' : '#ef4444'};
+            border: 3px solid white;
+            border-radius: 50%;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            font-weight: bold;
+            color: white;
+            z-index: 1000;
+          `;
+          markerElement.innerHTML = routePoints.length === 0 ? '🚀' : (routePoints.length).toString();
           markerElement.setAttribute('data-route-marker', 'true');
           
           new mapboxgl.Marker(markerElement)
@@ -675,7 +689,7 @@ const WeatherMap = () => {
             .setPopup(
               new mapboxgl.Popup({ offset: 25 }).setHTML(`
                 <div class="p-3 bg-gray-900 text-white rounded-lg shadow-lg border border-gray-600">
-                  <div class="font-semibold text-white">${routePoints.length === 0 ? 'Start Point' : `Waypoint ${routePoints.length}`}</div>
+                  <div class="font-semibold text-white">${routePoints.length === 0 ? 'Start Point' : `Point ${routePoints.length + 1}`}</div>
                   <div class="text-sm text-gray-200">${lat.toFixed(4)}, ${lng.toFixed(4)}</div>
                 </div>
               `)

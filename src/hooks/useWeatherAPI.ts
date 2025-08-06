@@ -45,8 +45,8 @@ export const useWeatherAPI = () => {
       console.log('Fetching weather data for coordinates:', { lat, lon });
       
       // Round coordinates to avoid cache misses and improve accuracy
-      const roundedLat = Math.round(lat * 10000) / 10000;
-      const roundedLon = Math.round(lon * 10000) / 10000;
+      const roundedLat = Math.round(lat * 1000) / 1000;
+      const roundedLon = Math.round(lon * 1000) / 1000;
 
       // Get current weather with rounded coordinates for consistency
       const weatherResponse = await fetch(
