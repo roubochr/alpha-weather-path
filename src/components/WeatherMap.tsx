@@ -264,23 +264,26 @@ const WeatherMap = () => {
         cursor: pointer;
       `;
 
-      new mapboxgl.Marker(markerElement)
-        .setLngLat(segment.coordinate)
-        .setPopup(
-          new mapboxgl.Popup({ offset: 25, closeButton: false }).setHTML(`
-            <div class="p-3 min-w-48">
-              <div class="font-semibold text-lg">${Math.round(segment.weather.temperature)}°C</div>
-              <div class="text-sm font-medium">${segment.weather.condition}</div>
-              <div class="text-xs mt-2 space-y-1">
-                <div>💧 Precipitation: ${segment.weather.precipitation}mm/h</div>
-                <div>💨 Wind: ${Math.round(segment.weather.windSpeed)}km/h</div>
-                <div>👁️ Visibility: ${Math.round(segment.weather.visibility/1000)}km</div>
-                <div>🕐 Arrival: ${segment.arrivalTime.toLocaleTimeString()}</div>
+      // Only add marker if map is ready
+      if (map.current && map.current.isStyleLoaded()) {
+        new mapboxgl.Marker(markerElement)
+          .setLngLat(segment.coordinate)
+          .setPopup(
+            new mapboxgl.Popup({ offset: 25, closeButton: false }).setHTML(`
+              <div class="p-3 min-w-48">
+                <div class="font-semibold text-lg">${Math.round(segment.weather.temperature)}°C</div>
+                <div class="text-sm font-medium">${segment.weather.condition}</div>
+                <div class="text-xs mt-2 space-y-1">
+                  <div>💧 Precipitation: ${segment.weather.precipitation}mm/h</div>
+                  <div>💨 Wind: ${Math.round(segment.weather.windSpeed)}km/h</div>
+                  <div>👁️ Visibility: ${Math.round(segment.weather.visibility/1000)}km</div>
+                  <div>🕐 Arrival: ${segment.arrivalTime.toLocaleTimeString()}</div>
+                </div>
               </div>
-            </div>
-          `)
-        )
-        .addTo(map.current!);
+            `)
+          )
+          .addTo(map.current!);
+      }
     });
   }, [getTimeBasedWeather, getPrecipitationColor]);
 
@@ -423,7 +426,12 @@ const WeatherMap = () => {
     
     // Function to update weather layer based on current hour
     const updateWeatherLayer = (hour: number) => {
-      if (!map.current) return;
+      if (!map.current || !map.current.isStyleLoaded()) {
+        console.log('Map style not loaded yet, skipping weather layer update');
+        return;
+      }
+      
+      console.log('Updating weather layer for hour:', hour);
       
       // Remove existing weather layer
       if (map.current.getLayer('weather-layer')) {
@@ -438,30 +446,36 @@ const WeatherMap = () => {
       targetDate.setHours(hour, 0, 0, 0);
       const timestamp = Math.floor(targetDate.getTime() / 1000);
 
-      // Add precipitation layer for the selected time
-      map.current.addSource('weather-tiles', {
-        type: 'raster',
-        tiles: [
-          `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=ba3708802ed7275ee958045d0a9a0f99&date=${timestamp}`
-        ],
-        tileSize: 256
-      });
+      try {
+        // Add precipitation layer for the selected time
+        map.current.addSource('weather-tiles', {
+          type: 'raster',
+          tiles: [
+            `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=ba3708802ed7275ee958045d0a9a0f99&date=${timestamp}`
+          ],
+          tileSize: 256
+        });
 
-      map.current.addLayer({
-        id: 'weather-layer',
-        type: 'raster',
-        source: 'weather-tiles',
-        paint: {
-          'raster-opacity': 0.6
-        }
-      });
+        map.current.addLayer({
+          id: 'weather-layer',
+          type: 'raster',
+          source: 'weather-tiles',
+          paint: {
+            'raster-opacity': 0.6
+          }
+        });
+      } catch (error) {
+        console.error('Error adding weather layer:', error);
+      }
     };
-
-    // Initial load
-    updateWeatherLayer(currentHour);
 
     // Store update function for external use
     (window as any).updateWeatherLayer = updateWeatherLayer;
+    
+    // Only update if style is loaded
+    if (map.current.isStyleLoaded()) {
+      updateWeatherLayer(currentHour);
+    }
   }, [hasWeatherAPI, currentHour]);
 
   // Initialize map
@@ -484,7 +498,12 @@ const WeatherMap = () => {
 
       map.current.on('load', () => {
         console.log('Map loaded successfully');
-        addWeatherLayer();
+        // Add weather layer after style is loaded
+        setTimeout(() => {
+          if (map.current && map.current.isStyleLoaded()) {
+            addWeatherLayer();
+          }
+        }, 100);
       });
 
       map.current.on('error', (e) => {
@@ -504,17 +523,19 @@ const WeatherMap = () => {
         setRoutePoints(newRoutePoints);
 
         // Add marker for the clicked point
-        new mapboxgl.Marker({ color: routePoints.length === 0 ? '#22c55e' : '#ef4444' })
-          .setLngLat([lng, lat])
-          .setPopup(
-            new mapboxgl.Popup({ offset: 25 }).setHTML(`
-              <div class="p-2">
-                <div class="font-semibold">${routePoints.length === 0 ? 'Start' : `Stop ${routePoints.length}`}</div>
-                <div class="text-sm text-gray-600">${lat.toFixed(4)}, ${lng.toFixed(4)}</div>
-              </div>
-            `)
-          )
-          .addTo(map.current!);
+        if (map.current && map.current.isStyleLoaded()) {
+          new mapboxgl.Marker({ color: routePoints.length === 0 ? '#22c55e' : '#ef4444' })
+            .setLngLat([lng, lat])
+            .setPopup(
+              new mapboxgl.Popup({ offset: 25 }).setHTML(`
+                <div class="p-2">
+                  <div class="font-semibold">${routePoints.length === 0 ? 'Start' : `Stop ${routePoints.length}`}</div>
+                  <div class="text-sm text-gray-600">${lat.toFixed(4)}, ${lng.toFixed(4)}</div>
+                </div>
+              `)
+            )
+            .addTo(map.current!);
+        }
 
         // Generate route if we have at least 2 points
         if (newRoutePoints.length >= 2) {
@@ -536,7 +557,7 @@ const WeatherMap = () => {
   // Handle hour changes for time slider
   useEffect(() => {
     console.log('Hour changed to:', currentHour);
-    if ((window as any).updateWeatherLayer) {
+    if ((window as any).updateWeatherLayer && map.current && map.current.isStyleLoaded()) {
       (window as any).updateWeatherLayer(currentHour);
     }
   }, [currentHour]);
