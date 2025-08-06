@@ -50,73 +50,121 @@ const WeatherMap: React.FC = () => {
   const { getWeatherData, loading } = useWeatherAPI();
   const { getRoute, loading: routeLoading } = useRouting(mapboxToken);
 
-  // Enhanced GPS tracking for navigation
+  // Enhanced GPS tracking for mobile devices
   useEffect(() => {
-    console.log('Setting up GPS tracking...');
+    console.log('Setting up mobile GPS tracking...');
     
-    const watchId = navigator.geolocation?.watchPosition(
-      (position) => {
-        const newLocation: [number, number] = [
-          position.coords.longitude, 
-          position.coords.latitude
-        ];
-        setUserLocation(newLocation);
-        
-        // Set initial location if not set
-        if (!currentLocation) {
-          setCurrentLocation(newLocation);
+    // Check if geolocation is available
+    if (!navigator.geolocation) {
+      console.log('Geolocation not supported, using default location');
+      setCurrentLocation([-74.006, 40.7128]);
+      return;
+    }
+
+    // Options optimized for mobile devices
+    const options = {
+      enableHighAccuracy: true,
+      timeout: 15000, // Longer timeout for mobile
+      maximumAge: 60000 // 1 minute cache for mobile efficiency
+    };
+
+    // For mobile Safari, request permission explicitly
+    const requestLocation = async () => {
+      try {
+        // Try to get permission first (for newer browsers)
+        if ('permissions' in navigator) {
+          const permission = await navigator.permissions.query({ name: 'geolocation' });
+          console.log('Geolocation permission:', permission.state);
         }
-        
-        // Update user location marker on map
-        if (map.current) {
-          // Remove existing user location marker
-          const existingMarker = document.querySelector('[data-user-location="true"]');
-          if (existingMarker) {
-            existingMarker.remove();
-          }
-          
-          // Add new user location marker
-          new mapboxgl.Marker({ 
-            color: '#10b981',
-            element: (() => {
-              const el = document.createElement('div');
-              el.setAttribute('data-user-location', 'true');
-              el.className = 'w-4 h-4 bg-green-500 rounded-full border-2 border-white shadow-lg';
-              return el;
-            })()
-          })
-            .setLngLat(newLocation)
-            .addTo(map.current);
-        }
-      },
-      (error) => {
-        console.error('GPS tracking error:', error);
-        // Fallback to one-time location
-        navigator.geolocation?.getCurrentPosition(
+
+        const watchId = navigator.geolocation.watchPosition(
           (position) => {
-            const fallbackLocation: [number, number] = [
+            console.log('GPS position updated:', position.coords);
+            const newLocation: [number, number] = [
               position.coords.longitude, 
               position.coords.latitude
             ];
-            setCurrentLocation(fallbackLocation);
-            setUserLocation(fallbackLocation);
+            setUserLocation(newLocation);
+            
+            // Set initial location if not set
+            if (!currentLocation) {
+              setCurrentLocation(newLocation);
+            }
+            
+            // Update user location marker on map
+            if (map.current) {
+              // Remove existing user location marker
+              const existingMarkers = document.querySelectorAll('[data-user-location="true"]');
+              existingMarkers.forEach(marker => marker.remove());
+              
+              // Add new user location marker with mobile-friendly styling
+              const markerElement = document.createElement('div');
+              markerElement.setAttribute('data-user-location', 'true');
+              markerElement.className = 'w-6 h-6 bg-green-500 rounded-full border-4 border-white shadow-lg pulse';
+              markerElement.style.cssText = `
+                animation: pulse 2s infinite;
+                transform: translate(-50%, -50%);
+                position: relative;
+              `;
+              
+              new mapboxgl.Marker({ 
+                element: markerElement,
+                anchor: 'center'
+              })
+                .setLngLat(newLocation)
+                .addTo(map.current);
+            }
           },
-          () => {
-            console.log('Using default location (New York)');
-            setCurrentLocation([-74.006, 40.7128]);
-          }
+          (error) => {
+            console.error('GPS tracking error:', error.message);
+            // More specific error handling for mobile
+            switch(error.code) {
+              case error.PERMISSION_DENIED:
+                console.log('Location permission denied by user');
+                break;
+              case error.POSITION_UNAVAILABLE:
+                console.log('Location information unavailable');
+                break;
+              case error.TIMEOUT:
+                console.log('Location request timeout');
+                break;
+            }
+            
+            // Fallback to one-time location request
+            navigator.geolocation.getCurrentPosition(
+              (position) => {
+                const fallbackLocation: [number, number] = [
+                  position.coords.longitude, 
+                  position.coords.latitude
+                ];
+                setCurrentLocation(fallbackLocation);
+                setUserLocation(fallbackLocation);
+              },
+              () => {
+                console.log('Using default location (New York)');
+                setCurrentLocation([-74.006, 40.7128]);
+              },
+              options
+            );
+          },
+          options
         );
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 30000
-      }
-    );
 
+        return () => {
+          if (watchId !== undefined) {
+            navigator.geolocation.clearWatch(watchId);
+          }
+        };
+      } catch (error) {
+        console.error('Error requesting location permission:', error);
+        setCurrentLocation([-74.006, 40.7128]);
+      }
+    };
+
+    const cleanup = requestLocation();
     return () => {
-      if (watchId !== undefined) {
-        navigator.geolocation?.clearWatch(watchId);
+      if (cleanup instanceof Promise) {
+        cleanup.then(cleanupFn => cleanupFn && cleanupFn());
       }
     };
   }, [currentLocation]);
@@ -139,7 +187,7 @@ const WeatherMap: React.FC = () => {
     mapboxgl.accessToken = mapboxToken;
 
     try {
-      // Safari iOS compatibility settings
+      // Safari iOS compatibility settings with mobile optimizations
       map.current = new mapboxgl.Map({
         container: mapContainer.current,
         style: 'mapbox://styles/mapbox/dark-v11',
@@ -147,7 +195,13 @@ const WeatherMap: React.FC = () => {
         zoom: 10,
         preserveDrawingBuffer: true, // Better Safari compatibility
         antialias: false, // Reduce memory usage on mobile
-        crossSourceCollisions: false // Improve performance
+        crossSourceCollisions: false, // Improve performance
+        touchZoomRotate: true, // Enable touch controls
+        touchPitch: true, // Enable touch pitch
+        dragRotate: true, // Enable drag rotation
+        doubleClickZoom: true, // Enable double tap zoom
+        keyboard: false, // Disable keyboard for mobile
+        scrollZoom: true // Enable scroll zoom
       });
 
       console.log('Map created successfully');
@@ -530,8 +584,16 @@ const WeatherMap: React.FC = () => {
 
       <div className="flex-1 flex">
         {/* Map */}
-        <div className="flex-1 relative">
-          <div ref={mapContainer} className="absolute inset-0" />
+        <div className="flex-1 relative touch-none">
+          <div 
+            ref={mapContainer} 
+            className="absolute inset-0 mapbox-map"
+            style={{ 
+              touchAction: 'pan-x pan-y',
+              WebkitUserSelect: 'none',
+              WebkitTouchCallout: 'none'
+            }}
+          />
           
           {/* Route Info Overlay */}
           {route.length > 0 && (

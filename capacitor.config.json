@@ -1,0 +1,20 @@
+{
+  "appId": "app.lovable.fa9a2d69518c4cf3a9679c23e2d4f99f",
+  "appName": "alpha-weather-path",
+  "webDir": "dist",
+  "server": {
+    "url": "https://fa9a2d69-518c-4cf3-a967-9c23e2d4f99f.lovableproject.com?forceHideBadge=true",
+    "cleartext": true
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchShowDuration": 3000,
+      "backgroundColor": "#1a1a2e",
+      "androidSplashResourceName": "splash",
+      "showSpinner": false
+    },
+    "Geolocation": {
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+    }
+  }
+}
