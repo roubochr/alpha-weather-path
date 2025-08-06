@@ -370,11 +370,17 @@ const WeatherMap: React.FC = () => {
     return '#10b981'; // Green for no rain
   };
 
-  // Simplified weather layer management
+  // Real weather layer management
   const addWeatherLayer = useCallback(async () => {
     if (!map.current || !showWeatherLayer) return;
 
-    console.log('Adding mock weather layer...');
+    const apiKey = localStorage.getItem('openweather-api-key');
+    if (!apiKey) {
+      console.log('No API key found, skipping weather layer');
+      return;
+    }
+
+    console.log('Adding real weather layer...');
     
     try {
       // Remove existing layers first
@@ -385,41 +391,26 @@ const WeatherMap: React.FC = () => {
         map.current.removeSource('precipitation');
       }
 
-      // Add a simple mock precipitation layer using a color overlay
+      // Add real precipitation layer from OpenWeatherMap
       map.current.addSource('precipitation', {
-        type: 'geojson',
-        data: {
-          type: 'FeatureCollection',
-          features: [
-            {
-              type: 'Feature',
-              properties: { intensity: 0.3 },
-              geometry: {
-                type: 'Polygon',
-                coordinates: [[
-                  [-180, -85],
-                  [180, -85],
-                  [180, 85],
-                  [-180, 85],
-                  [-180, -85]
-                ]]
-              }
-            }
-          ]
-        }
+        type: 'raster',
+        tiles: [
+          `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${apiKey}`
+        ],
+        tileSize: 256
       });
 
       map.current.addLayer({
         id: 'precipitation-layer',
-        type: 'fill',
+        type: 'raster',
         source: 'precipitation',
         paint: {
-          'fill-color': '#3b82f6',
-          'fill-opacity': 0.2
+          'raster-opacity': 0.6,
+          'raster-fade-duration': 300
         }
       });
       
-      console.log('Mock weather layer added successfully');
+      console.log('Real weather layer added successfully');
     } catch (error) {
       console.error('Error adding weather layer:', error);
     }
