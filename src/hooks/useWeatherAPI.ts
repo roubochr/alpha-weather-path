@@ -42,10 +42,14 @@ export const useWeatherAPI = () => {
       }
 
       console.log('Fetching weather data for coordinates:', { lat, lon });
+      
+      // Round coordinates to avoid cache misses and improve accuracy
+      const roundedLat = Math.round(lat * 10000) / 10000;
+      const roundedLon = Math.round(lon * 10000) / 10000;
 
-      // Get current weather
+      // Get current weather with rounded coordinates for consistency
       const weatherResponse = await fetch(
-        `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`
+        `https://api.openweathermap.org/data/2.5/weather?lat=${roundedLat}&lon=${roundedLon}&appid=${apiKey}&units=metric`
       );
       
       if (!weatherResponse.ok) {
@@ -53,10 +57,11 @@ export const useWeatherAPI = () => {
       }
       
       const weatherData = await weatherResponse.json();
+      console.log('Weather API response:', weatherData);
       
-      // Get forecast for route planning
+      // Get forecast for route planning with same rounded coordinates
       const forecastResponse = await fetch(
-        `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`
+        `https://api.openweathermap.org/data/2.5/forecast?lat=${roundedLat}&lon=${roundedLon}&appid=${apiKey}&units=metric`
       );
       
       const forecastData = await forecastResponse.json();

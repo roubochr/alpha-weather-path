@@ -3,7 +3,6 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Search, MapPin, Navigation } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 
 interface GeocodingResult {
   place_name: string;
@@ -24,15 +23,21 @@ const AddressSearch: React.FC<AddressSearchProps> = ({
   onStartNavigation,
   mapboxToken 
 }) => {
+  console.log('AddressSearch rendering with mapboxToken:', mapboxToken ? 'present' : 'missing');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<GeocodingResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
 
   const searchAddresses = useCallback(async (searchQuery: string) => {
-    if (!searchQuery.trim() || !mapboxToken) return;
+    if (!searchQuery.trim() || !mapboxToken) {
+      console.log('Search skipped - missing query or token');
+      return;
+    }
 
+    console.log('Searching for address:', searchQuery);
     setLoading(true);
+    
     try {
       const response = await fetch(
         `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(
@@ -42,8 +47,11 @@ const AddressSearch: React.FC<AddressSearchProps> = ({
       
       if (response.ok) {
         const data = await response.json();
+        console.log('Geocoding results:', data.features);
         setResults(data.features || []);
         setShowResults(true);
+      } else {
+        console.error('Geocoding failed:', response.status);
       }
     } catch (error) {
       console.error('Geocoding error:', error);
@@ -59,13 +67,25 @@ const AddressSearch: React.FC<AddressSearchProps> = ({
 
   const handleLocationSelect = (result: GeocodingResult) => {
     const [lng, lat] = result.center;
+    console.log('Address selected:', result.place_name, { lng, lat });
     onLocationSelect(lng, lat, result.place_name);
     setQuery(result.place_name);
     setShowResults(false);
   };
 
+  // Show a visible message if no mapbox token
+  if (!mapboxToken) {
+    return (
+      <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+        <p className="text-sm text-yellow-800">
+          Address search requires Mapbox token to be configured
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="relative">
+    <div className="relative w-full">
       <form onSubmit={handleSearch} className="flex space-x-2">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />

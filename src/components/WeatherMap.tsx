@@ -195,22 +195,26 @@ const WeatherMap = () => {
   }, [mapboxToken, currentLocation]);
 
   const addRoutePoint = useCallback(async (lng: number, lat: number) => {
-    console.log('Adding route point:', { lng, lat });
+    // Round coordinates for consistency
+    const roundedLng = Math.round(lng * 10000) / 10000;
+    const roundedLat = Math.round(lat * 10000) / 10000;
+    
+    console.log('Adding route point:', { lng: roundedLng, lat: roundedLat });
     
     // Add marker to map
     let marker: mapboxgl.Marker | undefined;
     if (map.current) {
       marker = new mapboxgl.Marker({ color: '#ef4444' })
-        .setLngLat([lng, lat])
+        .setLngLat([roundedLng, roundedLat])
         .addTo(map.current);
     }
 
-    const newPoint: RoutePoint = { lng, lat, marker };
+    const newPoint: RoutePoint = { lng: roundedLng, lat: roundedLat, marker };
     setRoute(prev => [...prev, newPoint]);
 
-    // Get real weather data for the point
+    // Get real weather data for the point using rounded coordinates
     console.log('Fetching weather data for point...');
-    const weatherData = await getWeatherData(lat, lng);
+    const weatherData = await getWeatherData(roundedLat, roundedLng);
     console.log('Weather data received:', weatherData);
     
     if (weatherData) {
@@ -230,7 +234,7 @@ const WeatherMap = () => {
       if (marker && map.current) {
         const popupElement = document.createElement('div');
         const popup = new mapboxgl.Popup({ offset: 25 })
-          .setLngLat([lng, lat])
+          .setLngLat([roundedLng, roundedLat])
           .setDOMContent(popupElement);
         
         // Create a simple weather display for the popup
@@ -423,7 +427,8 @@ const WeatherMap = () => {
     return <CloudRain className="h-4 w-4 text-weather-cloudy" />;
   };
 
-  console.log('Rendering state:', { hasWeatherAPI, showTokenInput });
+  console.log('Rendering state:', { hasWeatherAPI, showTokenInput, mapboxToken });
+  console.log('Route state:', { routeLength: route.length, currentRoute: !!currentRoute });
   
   if (!hasWeatherAPI) {
     console.log('Showing SecretForm...');
@@ -470,25 +475,16 @@ const WeatherMap = () => {
   }
 
   console.log('Rendering main weather map interface...');
+  console.log('AddressSearch props:', { mapboxToken: mapboxToken ? 'present' : 'missing' });
 
   return (
     <div className="h-screen flex flex-col bg-background">
       {/* Header with Address Search */}
-      <div className="bg-card border-b border-border p-4">
-        <div className="flex items-center justify-between mb-4">
+      <div className="bg-card border-b border-border p-4 space-y-4">
+        <div className="flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <CloudRain className="h-6 w-6 text-primary" />
             <h1 className="text-xl font-bold">Weather Route Planner</h1>
-          </div>
-        </div>
-        
-        <div className="flex items-center justify-between">
-          <div className="flex-1 mr-4">
-            <AddressSearch 
-              onLocationSelect={handleLocationSelect}
-              onStartNavigation={startNavigation}
-              mapboxToken={mapboxToken}
-            />
           </div>
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
@@ -520,6 +516,15 @@ const WeatherMap = () => {
               </Button>
             </div>
           </div>
+        </div>
+        
+        {/* Address Search Bar - Full Width */}
+        <div className="w-full">
+          <AddressSearch 
+            onLocationSelect={handleLocationSelect}
+            onStartNavigation={startNavigation}
+            mapboxToken={mapboxToken}
+          />
         </div>
       </div>
 
