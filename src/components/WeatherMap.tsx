@@ -21,6 +21,7 @@ interface RoutePoint {
 }
 
 const WeatherMap = () => {
+  console.log('WeatherMap component rendering...');
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const [mapboxToken, setMapboxToken] = useState(() => {
@@ -335,11 +336,15 @@ const WeatherMap = () => {
     return <CloudRain className="h-4 w-4 text-weather-cloudy" />;
   };
 
+  console.log('Rendering state:', { hasWeatherAPI, showTokenInput });
+  
   if (!hasWeatherAPI) {
+    console.log('Showing SecretForm...');
     return <SecretForm onApiKeySet={() => setHasWeatherAPI(true)} />;
   }
 
   if (showTokenInput) {
+    console.log('Showing token input...');
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <Card className="w-full max-w-md p-6">
@@ -376,6 +381,8 @@ const WeatherMap = () => {
       </div>
     );
   }
+
+  console.log('Rendering main weather map interface...');
 
   return (
     <div className="h-screen flex flex-col bg-background">
