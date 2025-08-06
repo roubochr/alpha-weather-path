@@ -35,15 +35,33 @@ interface RouteSegment {
 
 const WeatherMap: React.FC = () => {
   console.log('WeatherMap component rendering...');
+  
+  const handleTokenSubmit = (token: string) => {
+    if (token && !token.startsWith('http')) {
+      localStorage.setItem('mapbox-token', token);
+      setMapboxToken(token);
+      setShowTokenInput(false);
+    } else {
+      alert('Please enter a valid Mapbox token (not a URL)');
+    }
+  };
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const [mapboxToken, setMapboxToken] = useState(() => {
-    // Persist token in localStorage for Safari iOS
-    return localStorage.getItem('mapbox-token') || '';
+    const stored = localStorage.getItem('mapbox-token');
+    // Check if stored token is actually a valid token (not a URL)
+    if (stored && !stored.startsWith('http')) {
+      return stored;
+    }
+    // Clear invalid token
+    if (stored) {
+      localStorage.removeItem('mapbox-token');
+    }
+    return '';
   });
   const [showTokenInput, setShowTokenInput] = useState(() => {
-    // Only show input if no token is stored
-    return !localStorage.getItem('mapbox-token');
+    const stored = localStorage.getItem('mapbox-token');
+    return !stored || stored.startsWith('http');
   });
   const [route, setRoute] = useState<RoutePoint[]>([]);
   const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
@@ -560,11 +578,7 @@ const WeatherMap: React.FC = () => {
               onChange={(e) => setMapboxToken(e.target.value)}
             />
             <Button 
-              onClick={() => {
-                // Save token to localStorage for persistence
-                localStorage.setItem('mapbox-token', mapboxToken);
-                setShowTokenInput(false);
-              }}
+              onClick={() => handleTokenSubmit(mapboxToken)}
               disabled={!mapboxToken}
               className="w-full"
             >
@@ -572,9 +586,17 @@ const WeatherMap: React.FC = () => {
             </Button>
           </div>
           
-          <p className="text-xs text-muted-foreground mt-4 text-center">
-            Get your free token at <a href="https://mapbox.com" className="text-primary hover:underline">mapbox.com</a>
-          </p>
+          <div className="mt-4 p-3 bg-muted/50 rounded-lg">
+            <p className="text-xs text-muted-foreground mb-2">
+              <strong>How to get your Mapbox token:</strong>
+            </p>
+            <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
+              <li>Go to <a href="https://mapbox.com" target="_blank" className="text-primary hover:underline">mapbox.com</a></li>
+              <li>Sign up for a free account</li>
+              <li>Go to Account → Access tokens</li>
+              <li>Copy your "Default public token"</li>
+            </ol>
+          </div>
         </Card>
       </div>
     );
