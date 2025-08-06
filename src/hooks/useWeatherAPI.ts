@@ -41,6 +41,8 @@ export const useWeatherAPI = () => {
         throw new Error('OpenWeather API key not found');
       }
 
+      console.log('Fetching weather data for coordinates:', { lat, lon });
+
       // Get current weather
       const weatherResponse = await fetch(
         `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`

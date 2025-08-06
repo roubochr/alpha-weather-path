@@ -146,6 +146,8 @@ const WeatherMap = () => {
   }, [mapboxToken, currentLocation]);
 
   const addRoutePoint = useCallback(async (lng: number, lat: number) => {
+    console.log('Adding route point:', { lng, lat });
+    
     // Add marker to map
     let marker: mapboxgl.Marker | undefined;
     if (map.current) {
@@ -158,7 +160,10 @@ const WeatherMap = () => {
     setRoute(prev => [...prev, newPoint]);
 
     // Get real weather data for the point
+    console.log('Fetching weather data for point...');
     const weatherData = await getWeatherData(lat, lng);
+    console.log('Weather data received:', weatherData);
+    
     if (weatherData) {
       const rainProbability = Math.min(
         Math.round((weatherData.current.precipitation + weatherData.current.humidity / 2) / 2),
@@ -171,6 +176,25 @@ const WeatherMap = () => {
         rainProbability 
       };
       setRouteWeather(prev => [...prev, pointWithWeather]);
+      
+      // Add weather overlay popup to the marker
+      if (marker && map.current) {
+        const popupElement = document.createElement('div');
+        const popup = new mapboxgl.Popup({ offset: 25 })
+          .setLngLat([lng, lat])
+          .setDOMContent(popupElement);
+        
+        // Create a simple weather display for the popup
+        popupElement.innerHTML = `
+          <div class="p-2 text-sm">
+            <div class="font-semibold">${weatherData.current.temperature}°C</div>
+            <div class="text-xs">${weatherData.current.condition}</div>
+            <div class="text-xs">Humidity: ${weatherData.current.humidity}%</div>
+          </div>
+        `;
+        
+        marker.setPopup(popup);
+      }
     }
   }, [getWeatherData]);
 
@@ -178,11 +202,17 @@ const WeatherMap = () => {
     if (!map.current || !showWeatherLayer) return;
 
     const apiKey = localStorage.getItem('openweather-api-key');
-    if (!apiKey) return;
+    if (!apiKey) {
+      console.log('No weather API key found');
+      return;
+    }
 
+    console.log('Adding weather layer...');
+    
     // Add precipitation layer
     try {
       if (!map.current.getSource('precipitation')) {
+        console.log('Creating precipitation source...');
         map.current.addSource('precipitation', {
           type: 'raster',
           tiles: [
@@ -199,6 +229,7 @@ const WeatherMap = () => {
             'raster-opacity': 0.6
           }
         });
+        console.log('Weather layer added successfully');
       }
     } catch (error) {
       console.error('Error adding weather layer:', error);
@@ -208,6 +239,7 @@ const WeatherMap = () => {
   const removeWeatherLayer = useCallback(() => {
     if (!map.current) return;
     
+    console.log('Removing weather layer...');
     try {
       if (map.current.getLayer('precipitation-layer')) {
         map.current.removeLayer('precipitation-layer');
@@ -215,6 +247,7 @@ const WeatherMap = () => {
       if (map.current.getSource('precipitation')) {
         map.current.removeSource('precipitation');
       }
+      console.log('Weather layer removed successfully');
     } catch (error) {
       console.error('Error removing weather layer:', error);
     }
