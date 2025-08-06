@@ -1,25 +1,23 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { CloudRain, MapPin, Route, AlertTriangle } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { CloudRain, MapPin, Route, AlertTriangle, Layers, Navigation } from 'lucide-react';
+import { useWeatherAPI, WeatherData } from '@/hooks/useWeatherAPI';
+import SecretForm from './SecretForm';
 
-interface WeatherData {
-  temperature: number;
-  humidity: number;
-  precipitation: number;
-  condition: string;
-  windSpeed: number;
-}
 
 interface RoutePoint {
   lng: number;
   lat: number;
   weather?: WeatherData;
   rainProbability?: number;
+  marker?: mapboxgl.Marker;
 }
 
 const WeatherMap = () => {
@@ -36,6 +34,12 @@ const WeatherMap = () => {
   const [route, setRoute] = useState<RoutePoint[]>([]);
   const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
   const [routeWeather, setRouteWeather] = useState<RoutePoint[]>([]);
+  const [showWeatherLayer, setShowWeatherLayer] = useState(false);
+  const [weatherMarkers, setWeatherMarkers] = useState<mapboxgl.Marker[]>([]);
+  const [hasWeatherAPI, setHasWeatherAPI] = useState(() => {
+    return !!localStorage.getItem('openweather-api-key');
+  });
+  const { getWeatherData, loading } = useWeatherAPI();
 
   // Get current location with Safari iOS compatibility
   useEffect(() => {
@@ -141,68 +145,145 @@ const WeatherMap = () => {
     };
   }, [mapboxToken, currentLocation]);
 
-  const addRoutePoint = (lng: number, lat: number) => {
-    const newPoint: RoutePoint = { lng, lat };
-    setRoute(prev => [...prev, newPoint]);
-
+  const addRoutePoint = useCallback(async (lng: number, lat: number) => {
     // Add marker to map
+    let marker: mapboxgl.Marker | undefined;
     if (map.current) {
-      new mapboxgl.Marker({ color: '#ef4444' })
+      marker = new mapboxgl.Marker({ color: '#ef4444' })
         .setLngLat([lng, lat])
         .addTo(map.current);
     }
 
-    // Simulate weather data for the point
-    simulateWeatherData(newPoint);
-  };
+    const newPoint: RoutePoint = { lng, lat, marker };
+    setRoute(prev => [...prev, newPoint]);
 
-  const simulateWeatherData = (point: RoutePoint) => {
-    // Simulate weather API call
-    const weatherData: WeatherData = {
-      temperature: Math.floor(Math.random() * 30) + 10,
-      humidity: Math.floor(Math.random() * 100),
-      precipitation: Math.random() * 10,
-      condition: ['Clear', 'Cloudy', 'Light Rain', 'Heavy Rain', 'Thunderstorm'][Math.floor(Math.random() * 5)],
-      windSpeed: Math.floor(Math.random() * 20) + 5,
-    };
+    // Get real weather data for the point
+    const weatherData = await getWeatherData(lat, lng);
+    if (weatherData) {
+      const rainProbability = Math.min(
+        Math.round((weatherData.current.precipitation + weatherData.current.humidity / 2) / 2),
+        100
+      );
+      
+      const pointWithWeather = { 
+        ...newPoint, 
+        weather: weatherData.current, 
+        rainProbability 
+      };
+      setRouteWeather(prev => [...prev, pointWithWeather]);
+    }
+  }, [getWeatherData]);
 
-    const rainProbability = weatherData.precipitation > 5 ? 
-      Math.floor((weatherData.precipitation / 10) * 100) : 
-      Math.floor(Math.random() * 30);
+  const addWeatherLayer = useCallback(async () => {
+    if (!map.current || !showWeatherLayer) return;
 
-    const pointWithWeather = { ...point, weather: weatherData, rainProbability };
-    setRouteWeather(prev => [...prev, pointWithWeather]);
-  };
+    const apiKey = localStorage.getItem('openweather-api-key');
+    if (!apiKey) return;
 
-  const clearRoute = () => {
+    // Add precipitation layer
+    try {
+      if (!map.current.getSource('precipitation')) {
+        map.current.addSource('precipitation', {
+          type: 'raster',
+          tiles: [
+            `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${apiKey}`
+          ],
+          tileSize: 256
+        });
+
+        map.current.addLayer({
+          id: 'precipitation-layer',
+          type: 'raster',
+          source: 'precipitation',
+          paint: {
+            'raster-opacity': 0.6
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error adding weather layer:', error);
+    }
+  }, [showWeatherLayer]);
+
+  const removeWeatherLayer = useCallback(() => {
+    if (!map.current) return;
+    
+    try {
+      if (map.current.getLayer('precipitation-layer')) {
+        map.current.removeLayer('precipitation-layer');
+      }
+      if (map.current.getSource('precipitation')) {
+        map.current.removeSource('precipitation');
+      }
+    } catch (error) {
+      console.error('Error removing weather layer:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (showWeatherLayer) {
+      addWeatherLayer();
+    } else {
+      removeWeatherLayer();
+    }
+  }, [showWeatherLayer, addWeatherLayer, removeWeatherLayer]);
+
+  const clearRoute = useCallback(() => {
+    // Remove all route markers
+    route.forEach(point => {
+      if (point.marker) {
+        point.marker.remove();
+      }
+    });
+    
+    // Clear weather markers
+    weatherMarkers.forEach(marker => marker.remove());
+    setWeatherMarkers([]);
+    
     setRoute([]);
     setRouteWeather([]);
-    
-    // Remove all markers except current location
-    if (map.current && currentLocation) {
-      // This is a simplified approach - in a real app you'd track markers
-      map.current.remove();
-      
-      // Reinitialize map
-      mapboxgl.accessToken = mapboxToken;
-      map.current = new mapboxgl.Map({
-        container: mapContainer.current!,
-        style: 'mapbox://styles/mapbox/dark-v11',
-        center: currentLocation,
-        zoom: 10,
-      });
+  }, [route, weatherMarkers]);
 
-      map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
-      
-      new mapboxgl.Marker({ color: '#3b82f6' })
-        .setLngLat(currentLocation)
-        .addTo(map.current);
+  const planOptimalRoute = useCallback(async () => {
+    if (route.length < 2) return;
 
-      map.current.on('click', (e) => {
-        addRoutePoint(e.lngLat.lng, e.lngLat.lat);
-      });
+    // Create a route line on the map
+    if (map.current) {
+      const coordinates = route.map(point => [point.lng, point.lat]);
+      
+      const geojson = {
+        type: 'Feature' as const,
+        properties: {},
+        geometry: {
+          type: 'LineString' as const,
+          coordinates
+        }
+      };
+
+      if (map.current.getSource('route')) {
+        (map.current.getSource('route') as mapboxgl.GeoJSONSource).setData(geojson);
+      } else {
+        map.current.addSource('route', {
+          type: 'geojson',
+          data: geojson
+        });
+
+        map.current.addLayer({
+          id: 'route',
+          type: 'line',
+          source: 'route',
+          layout: {
+            'line-join': 'round',
+            'line-cap': 'round'
+          },
+          paint: {
+            'line-color': '#3b82f6',
+            'line-width': 4
+          }
+        });
+      }
     }
-  };
+  }, [route]);
 
   const getWeatherColor = (condition: string) => {
     switch (condition) {
@@ -220,6 +301,10 @@ const WeatherMap = () => {
     if (probability > 40) return <CloudRain className="h-4 w-4 text-weather-warning" />;
     return <CloudRain className="h-4 w-4 text-weather-cloudy" />;
   };
+
+  if (!hasWeatherAPI) {
+    return <SecretForm onApiKeySet={() => setHasWeatherAPI(true)} />;
+  }
 
   if (showTokenInput) {
     return (
@@ -268,11 +353,30 @@ const WeatherMap = () => {
             <CloudRain className="h-6 w-6 text-primary" />
             <h1 className="text-xl font-bold">Weather Route Planner</h1>
           </div>
-          <div className="flex space-x-2">
-            <Button variant="outline" size="sm" onClick={clearRoute}>
-              <Route className="h-4 w-4 mr-2" />
-              Clear Route
-            </Button>
+          <div className="flex items-center space-x-4">
+            <div className="flex items-center space-x-2">
+              <Switch
+                id="weather-layer"
+                checked={showWeatherLayer}
+                onCheckedChange={setShowWeatherLayer}
+              />
+              <Label htmlFor="weather-layer" className="flex items-center space-x-1">
+                <Layers className="h-4 w-4" />
+                <span>Weather Layer</span>
+              </Label>
+            </div>
+            <div className="flex space-x-2">
+              {route.length >= 2 && (
+                <Button variant="outline" size="sm" onClick={planOptimalRoute}>
+                  <Navigation className="h-4 w-4 mr-2" />
+                  Plan Route
+                </Button>
+              )}
+              <Button variant="outline" size="sm" onClick={clearRoute}>
+                <Route className="h-4 w-4 mr-2" />
+                Clear Route
+              </Button>
+            </div>
           </div>
         </div>
       </div>
