@@ -118,12 +118,12 @@ const WeatherMap = () => {
       });
     }
 
-    // Fetch weather for each sample point with some variation for demo
+    // Fetch weather for each sample point with time-based variation
     const weatherSegments = await Promise.all(
       samplePoints.map(async (point, index) => {
         const weather = await getTimeBasedWeather(point.coordinate[1], point.coordinate[0], point.arrivalTime);
         
-        // Add some variation for demo purposes since API might return similar data
+        // Get base weather data
         const baseWeather = weather?.current || {
           temperature: 20,
           condition: 'Clear',
@@ -134,17 +134,55 @@ const WeatherMap = () => {
           visibility: 10000
         };
         
-        // Simulate weather variation along route for better visualization
-        const variation = Math.sin(index * 0.5) * 2 + Math.random() * 3;
-        const precipitationVariation = Math.max(0, baseWeather.precipitation + variation);
+        // Create time-based weather variations based on departure time and current hour slider
+        const hoursDiff = (point.arrivalTime.getTime() - departureTime.getTime()) / (1000 * 60 * 60);
+        const timeOfDay = (departureTime.getHours() + hoursDiff) % 24;
+        
+        // Simulate realistic weather patterns based on time
+        let precipitationMultiplier = 1;
+        let tempAdjustment = 0;
+        let conditionOverride = baseWeather.condition;
+        
+        // Night time (10pm-6am) - more likely to have precipitation
+        if (timeOfDay >= 22 || timeOfDay <= 6) {
+          precipitationMultiplier = 1.5 + Math.sin(index * 0.3) * 0.8;
+          tempAdjustment = -3;
+          if (precipitationMultiplier > 1.2) conditionOverride = 'Light Rain';
+        }
+        // Early morning (6am-10am) - fog/mist conditions
+        else if (timeOfDay >= 6 && timeOfDay <= 10) {
+          precipitationMultiplier = 0.8 + Math.sin(index * 0.4) * 0.6;
+          tempAdjustment = -1;
+          if (Math.sin(index * 0.5) > 0.3) conditionOverride = 'Mist';
+        }
+        // Afternoon (12pm-6pm) - clear but potential thunderstorms
+        else if (timeOfDay >= 12 && timeOfDay <= 18) {
+          precipitationMultiplier = 0.5 + Math.sin(index * 0.2) * 1.5;
+          tempAdjustment = 2;
+          if (precipitationMultiplier > 1.8) conditionOverride = 'Thunderstorm';
+        }
+        // Evening (6pm-10pm) - moderate conditions
+        else {
+          precipitationMultiplier = 0.7 + Math.sin(index * 0.25) * 0.5;
+          tempAdjustment = 0;
+        }
+        
+        // Add route position variation (weather changes along the route)
+        const routePosition = index / samplePoints.length;
+        const positionVariation = Math.sin(routePosition * Math.PI * 3) * 2;
+        
+        const finalPrecipitation = Math.max(0, 
+          baseWeather.precipitation * precipitationMultiplier + positionVariation
+        );
         
         return {
           coordinate: point.coordinate,
           arrivalTime: point.arrivalTime,
           weather: {
             ...baseWeather,
-            precipitation: precipitationVariation,
-            temperature: baseWeather.temperature + (Math.random() - 0.5) * 4
+            precipitation: finalPrecipitation,
+            temperature: baseWeather.temperature + tempAdjustment + (Math.random() - 0.5) * 2,
+            condition: conditionOverride
           }
         };
       })
@@ -236,18 +274,27 @@ const WeatherMap = () => {
         const condition = feature.properties?.condition || 'Unknown';
         const arrivalTime = feature.properties?.arrivalTime || '';
         
-        // Create hover popup
+        // Remove any existing hover popup
+        if ((window as any).hoverPopup) {
+          (window as any).hoverPopup.remove();
+        }
+        
+        // Create hover popup with better styling
         const popup = new mapboxgl.Popup({
           closeButton: false,
           closeOnClick: false,
-          offset: [0, -10]
+          offset: [0, -10],
+          className: 'weather-hover-popup'
         })
         .setLngLat(e.lngLat)
         .setHTML(`
-          <div class="p-2 text-xs">
-            <div class="font-semibold">${Math.round(temperature)}°C • ${condition}</div>
-            <div>Rain: ${precipitation}mm/h</div>
-            <div>Arrival: ${arrivalTime}</div>
+          <div class="p-3 bg-gray-900 text-white rounded-lg shadow-lg border border-gray-600 min-w-48">
+            <div class="font-bold text-lg text-white">${Math.round(temperature)}°C</div>
+            <div class="font-semibold text-blue-200">${condition}</div>
+            <div class="text-sm text-gray-200 mt-1">
+              <div>💧 Rain: ${precipitation.toFixed(1)}mm/h</div>
+              <div>🕐 Arrival: ${arrivalTime}</div>
+            </div>
           </div>
         `)
         .addTo(map.current);
@@ -261,10 +308,17 @@ const WeatherMap = () => {
       if (!map.current) return;
       map.current.getCanvas().style.cursor = '';
       
-      // Remove hover popup
+      // Remove hover popup immediately
       if ((window as any).hoverPopup) {
         (window as any).hoverPopup.remove();
         (window as any).hoverPopup = null;
+      }
+    });
+
+    map.current.on('mousemove', 'route-line', (e) => {
+      // Update popup position if it exists
+      if ((window as any).hoverPopup && e.features && e.features[0]) {
+        (window as any).hoverPopup.setLngLat(e.lngLat);
       }
     });
 
@@ -319,20 +373,20 @@ const WeatherMap = () => {
       if (map.current && map.current.isStyleLoaded()) {
         new mapboxgl.Marker(markerElement)
           .setLngLat(segment.coordinate)
-          .setPopup(
-            new mapboxgl.Popup({ offset: 25, closeButton: false }).setHTML(`
-              <div class="p-3 min-w-48">
-                <div class="font-semibold text-lg">${Math.round(segment.weather.temperature)}°C</div>
-                <div class="text-sm font-medium">${segment.weather.condition}</div>
-                <div class="text-xs mt-2 space-y-1">
-                  <div>💧 Precipitation: ${segment.weather.precipitation}mm/h</div>
-                  <div>💨 Wind: ${Math.round(segment.weather.windSpeed)}km/h</div>
-                  <div>👁️ Visibility: ${Math.round(segment.weather.visibility/1000)}km</div>
-                  <div>🕐 Arrival: ${segment.arrivalTime.toLocaleTimeString()}</div>
-                </div>
+        .setPopup(
+          new mapboxgl.Popup({ offset: 25, closeButton: false }).setHTML(`
+            <div class="p-3 bg-gray-900 text-white rounded-lg shadow-lg border border-gray-600 min-w-48">
+              <div class="font-bold text-xl text-white">${Math.round(segment.weather.temperature)}°C</div>
+              <div class="font-semibold text-blue-200 mb-2">${segment.weather.condition}</div>
+              <div class="text-sm text-gray-200 space-y-1">
+                <div>💧 Precipitation: ${segment.weather.precipitation.toFixed(1)}mm/h</div>
+                <div>💨 Wind: ${Math.round(segment.weather.windSpeed)}km/h</div>
+                <div>👁️ Visibility: ${Math.round(segment.weather.visibility/1000)}km</div>
+                <div>🕐 Arrival: ${segment.arrivalTime.toLocaleTimeString()}</div>
               </div>
-            `)
-          )
+            </div>
+          `)
+        )
           .addTo(map.current!);
       }
     });
@@ -633,12 +687,24 @@ const WeatherMap = () => {
     }
   }, [currentHour]);
 
-  // Handle departure time changes
+  // Handle departure time changes - regenerate route with new weather
   useEffect(() => {
     if (routePoints.length >= 2 && currentRoute) {
+      console.log('Regenerating route for new departure time:', departureTime);
       generateRoute(routePoints);
     }
-  }, [departureTime, routePoints, currentRoute, generateRoute]);
+  }, [departureTime, routePoints, generateRoute]);
+
+  // Handle current hour changes - regenerate route weather for new time
+  useEffect(() => {
+    if (routePoints.length >= 2) {
+      console.log('Regenerating route for new hour:', currentHour);
+      // Update departure time to reflect the current hour selection
+      const newDepartureTime = new Date(departureTime);
+      newDepartureTime.setHours(currentHour);
+      setDepartureTime(newDepartureTime);
+    }
+  }, [currentHour, routePoints]);
 
   const handleApiKeySubmit = (apiKey: string) => {
     localStorage.setItem('openweather-api-key', apiKey);
