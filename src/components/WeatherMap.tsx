@@ -61,7 +61,13 @@ const WeatherMap: React.FC = () => {
   const [showWeatherLayer, setShowWeatherLayer] = useState(false);
   const [weatherMarkers, setWeatherMarkers] = useState<mapboxgl.Marker[]>([]);
   const [hasWeatherAPI, setHasWeatherAPI] = useState(() => {
-    return !!localStorage.getItem('openweather-api-key');
+    const stored = localStorage.getItem('openweather-api-key');
+    // Clear invalid API key if it's a URL
+    if (stored && stored.startsWith('http')) {
+      localStorage.removeItem('openweather-api-key');
+      return false;
+    }
+    return !!stored;
   });
   const [currentRoute, setCurrentRoute] = useState<RouteData | null>(null);
   const [isNavigating, setIsNavigating] = useState(false);
