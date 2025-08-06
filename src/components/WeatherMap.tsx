@@ -391,23 +391,34 @@ const WeatherMap: React.FC = () => {
         map.current.removeSource('precipitation');
       }
 
-      // Add real precipitation layer from OpenWeatherMap
-      map.current.addSource('precipitation', {
+      // Add real weather layer from OpenWeatherMap (using clouds layer which is always visible)
+      map.current.addSource('weather', {
         type: 'raster',
         tiles: [
-          `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${apiKey}`
+          `https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=${apiKey}`
         ],
         tileSize: 256
       });
 
       map.current.addLayer({
-        id: 'precipitation-layer',
+        id: 'weather-layer',
         type: 'raster',
-        source: 'precipitation',
+        source: 'weather',
         paint: {
-          'raster-opacity': 0.6,
+          'raster-opacity': 0.5,
           'raster-fade-duration': 300
         }
+      });
+
+      // Add event listeners to debug tile loading
+      map.current.on('sourcedata', (e) => {
+        if (e.sourceId === 'weather' && e.isSourceLoaded) {
+          console.log('Weather tiles loaded successfully');
+        }
+      });
+
+      map.current.on('error', (e) => {
+        console.error('Map error:', e);
       });
       
       console.log('Real weather layer added successfully');
@@ -421,11 +432,11 @@ const WeatherMap: React.FC = () => {
     
     console.log('Removing weather layer...');
     try {
-      if (map.current.getLayer('precipitation-layer')) {
-        map.current.removeLayer('precipitation-layer');
+      if (map.current.getLayer('weather-layer')) {
+        map.current.removeLayer('weather-layer');
       }
-      if (map.current.getSource('precipitation')) {
-        map.current.removeSource('precipitation');
+      if (map.current.getSource('weather')) {
+        map.current.removeSource('weather');
       }
       console.log('Weather layer removed successfully');
     } catch (error) {
