@@ -48,11 +48,13 @@ const WeatherMap: React.FC = () => {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const [mapboxToken, setMapboxToken] = useState(() => {
-    // Clear any potentially invalid tokens on startup
-    localStorage.removeItem('mapbox-token');
-    return '';
+    const stored = localStorage.getItem('mapbox-token');
+    return stored || '';
   });
-  const [showTokenInput, setShowTokenInput] = useState(true);
+  const [showTokenInput, setShowTokenInput] = useState(() => {
+    const stored = localStorage.getItem('mapbox-token');
+    return !stored;
+  });
   const [route, setRoute] = useState<RoutePoint[]>([]);
   const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
   const [routeWeather, setRouteWeather] = useState<RoutePoint[]>([]);
@@ -77,10 +79,15 @@ const WeatherMap: React.FC = () => {
   useEffect(() => {
     console.log('Setting up mobile GPS tracking...');
     
+    // Set default location immediately to allow map to initialize
+    if (!currentLocation) {
+      console.log('Setting default location (New York)');
+      setCurrentLocation([-74.006, 40.7128]);
+    }
+    
     // Check if geolocation is available
     if (!navigator.geolocation) {
-      console.log('Geolocation not supported, using default location');
-      setCurrentLocation([-74.006, 40.7128]);
+      console.log('Geolocation not supported, keeping default location');
       return;
     }
 
