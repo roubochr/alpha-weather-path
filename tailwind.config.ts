@@ -52,6 +52,14 @@ export default {
 					DEFAULT: 'hsl(var(--card))',
 					foreground: 'hsl(var(--card-foreground))'
 				},
+				weather: {
+					clear: 'hsl(var(--weather-clear))',
+					cloudy: 'hsl(var(--weather-cloudy))',
+					rain: 'hsl(var(--weather-rain))',
+					storm: 'hsl(var(--weather-storm))',
+					warning: 'hsl(var(--weather-warning))',
+					danger: 'hsl(var(--weather-danger))'
+				},
 				sidebar: {
 					DEFAULT: 'hsl(var(--sidebar-background))',
 					foreground: 'hsl(var(--sidebar-foreground))',
@@ -84,11 +92,39 @@ export default {
 					to: {
 						height: '0'
 					}
+				},
+				'weather-pulse': {
+					'0%, 100%': {
+						opacity: '1'
+					},
+					'50%': {
+						opacity: '0.7'
+					}
+				},
+				'rain-drop': {
+					'0%': {
+						transform: 'translateY(-100%) scale(0)',
+						opacity: '0'
+					},
+					'50%': {
+						opacity: '1'
+					},
+					'100%': {
+						transform: 'translateY(100vh) scale(1)',
+						opacity: '0'
+					}
 				}
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
-				'accordion-up': 'accordion-up 0.2s ease-out'
+				'accordion-up': 'accordion-up 0.2s ease-out',
+				'weather-pulse': 'weather-pulse 2s ease-in-out infinite',
+				'rain-drop': 'rain-drop 1s ease-in infinite'
+			},
+			backgroundImage: {
+				'gradient-rain': 'var(--gradient-rain)',
+				'gradient-clear': 'var(--gradient-clear)',
+				'gradient-warning': 'var(--gradient-warning)'
 			}
 		}
 	},
