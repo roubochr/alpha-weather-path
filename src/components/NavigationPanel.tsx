@@ -77,7 +77,7 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
             <Navigation className="h-5 w-5 text-primary mt-1 flex-shrink-0" />
             <div>
               <p className="font-medium text-sm">
-                {route.steps[currentStep]?.instruction || 'Continue on route'}
+                Continue on route
               </p>
               <p className="text-xs text-muted-foreground mt-1">
                 {route.steps[currentStep] && 
@@ -115,7 +115,7 @@ const NavigationPanel: React.FC<NavigationPanelProps> = ({
                   {index + 1}
                 </Badge>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">{step.instruction}</p>
+                  <p className="text-sm font-medium">Continue on route</p>
                   <p className="text-xs text-muted-foreground mt-1">
                     {formatDistance(step.distance)} • {formatDuration(step.duration)}
                   </p>

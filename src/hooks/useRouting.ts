@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react';
 
 export interface RouteStep {
-  instruction: string;
   distance: number;
   duration: number;
   geometry: {
@@ -55,7 +54,6 @@ export const useRouting = (mapboxToken: string) => {
         duration: route.duration,
         geometry: route.geometry,
         steps: route.legs[0]?.steps?.map((step: any) => ({
-          instruction: step.maneuver.instruction,
           distance: step.distance,
           duration: step.duration,
           geometry: step.geometry

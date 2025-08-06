@@ -68,6 +68,161 @@ const WeatherMap: React.FC = () => {
   const { getRoute, loading: routeLoading } = useRouting(mapboxToken);
   const { getTimeBasedWeather, calculateArrivalWeather } = useTimeBasedWeather();
 
+  const getPrecipitationColor = useCallback((precipitation: number): string => {
+    if (precipitation > 5) return '#dc2626'; // Red for heavy rain
+    if (precipitation > 2) return '#f59e0b'; // Amber for moderate rain
+    if (precipitation > 0.5) return '#3b82f6'; // Blue for light rain
+    return '#10b981'; // Green for no rain
+  }, []);
+
+  const visualizeWeatherRoute = useCallback(async (routeData: any, departureTime: Date) => {
+    if (!map.current) return;
+    
+    // Sample points along the route for weather data
+    const routeCoordinates = routeData.geometry.coordinates;
+    const sampleInterval = Math.max(1, Math.floor(routeCoordinates.length / 20)); // Sample ~20 points
+    const sampledCoordinates = routeCoordinates.filter((_: any, index: number) => index % sampleInterval === 0);
+
+    // Fetch weather data for sampled points
+    const hourlyForecasts: { [coordinate: string]: { [hour: number]: any } } = {};
+    
+    for (const coord of sampledCoordinates) {
+      const apiKey = localStorage.getItem('openweather-api-key');
+      if (!apiKey) continue;
+      
+      try {
+        // Get weather forecast for this coordinate
+        const response = await fetch(
+          `https://api.openweathermap.org/data/2.5/forecast?lat=${coord[1]}&lon=${coord[0]}&appid=${apiKey}&units=metric`
+        );
+        
+        if (response.ok) {
+          const forecastData = await response.json();
+          const coordKey = `${coord[0]},${coord[1]}`;
+          
+          // Process forecast into hourly format
+          const hourlyForecast: { [hour: number]: any } = {};
+          forecastData.list.forEach((item: any) => {
+            const forecastTime = new Date(item.dt * 1000);
+            const hourKey = forecastTime.getHours();
+            
+            hourlyForecast[hourKey] = {
+              temperature: Math.round(item.main.temp),
+              humidity: item.main.humidity,
+              precipitation: item.rain?.['3h'] || 0,
+              condition: item.weather[0].main,
+              description: item.weather[0].description,
+              windSpeed: Math.round(item.wind.speed * 3.6),
+              pressure: item.main.pressure,
+              visibility: 10,
+              icon: item.weather[0].icon
+            };
+          });
+          
+          hourlyForecasts[coordKey] = hourlyForecast;
+        }
+      } catch (error) {
+        console.error('Error fetching weather for coordinate:', error);
+      }
+    }
+
+    // Calculate weather conditions along route based on timing
+    const weatherAlongRoute = calculateArrivalWeather(
+      routeCoordinates,
+      departureTime,
+      routeData.duration,
+      hourlyForecasts
+    );
+
+    // Create route line with weather-based coloring
+    const routeLineFeatures = weatherAlongRoute.map((segment, index) => {
+      const precipitation = segment.weather.precipitation || 0;
+      const color = getPrecipitationColor(precipitation);
+      
+      return {
+        type: 'Feature' as const,
+        properties: {
+          color,
+          precipitation,
+          temperature: segment.weather.temperature,
+          condition: segment.weather.condition,
+          arrivalTime: segment.arrivalTime.toLocaleTimeString()
+        },
+        geometry: {
+          type: 'LineString' as const,
+          coordinates: [
+            segment.coordinate,
+            weatherAlongRoute[index + 1]?.coordinate || segment.coordinate
+          ]
+        }
+      };
+    });
+
+    // Add route source and layer
+    if (map.current.getSource('weather-route')) {
+      map.current.removeLayer('weather-route');
+      map.current.removeSource('weather-route');
+    }
+
+    map.current.addSource('weather-route', {
+      type: 'geojson',
+      data: {
+        type: 'FeatureCollection',
+        features: routeLineFeatures
+      }
+    });
+
+    map.current.addLayer({
+      id: 'weather-route',
+      type: 'line',
+      source: 'weather-route',
+      layout: {
+        'line-join': 'round',
+        'line-cap': 'round'
+      },
+      paint: {
+        'line-color': ['get', 'color'],
+        'line-width': 6,
+        'line-opacity': 0.8
+      }
+    });
+
+    // Add weather indicators
+    const weatherIndicators = weatherAlongRoute.filter((_, index) => index % 5 === 0); // Every 5th point
+    
+    weatherIndicators.forEach((segment) => {
+      const marker = new mapboxgl.Marker({
+        color: getPrecipitationColor(segment.weather.precipitation),
+        scale: 0.8
+      })
+        .setLngLat(segment.coordinate)
+        .setPopup(
+          new mapboxgl.Popup({ offset: 25 }).setHTML(`
+            <div class="p-3">
+              <div class="font-semibold">${segment.weather.temperature}°C</div>
+              <div class="text-sm">${segment.weather.condition}</div>
+              <div class="text-xs">Precipitation: ${segment.weather.precipitation}mm</div>
+              <div class="text-xs">Arrival: ${segment.arrivalTime.toLocaleTimeString()}</div>
+            </div>
+          `)
+        )
+        .addTo(map.current!);
+    });
+  }, [getTimeBasedWeather, calculateArrivalWeather, getPrecipitationColor]);
+
+  const generateRoute = useCallback(async (routePoints: RoutePoint[]) => {
+    if (routePoints.length < 2 || !mapboxToken) return;
+
+    const coordinates: [number, number][] = routePoints.map(point => [point.lng, point.lat]);
+    
+    // Get route from Mapbox
+    const routeData = await getRoute(coordinates);
+    if (!routeData) return;
+
+    // Generate weather-based route visualization
+    await visualizeWeatherRoute(routeData, new Date());
+  }, [mapboxToken, getRoute, visualizeWeatherRoute]);
+
   // Check for existing API key on mount and set the provided key
   useEffect(() => {
     let apiKey = localStorage.getItem('openweather-api-key');
@@ -312,63 +467,11 @@ const WeatherMap: React.FC = () => {
     const newPoint: RoutePoint = { lng: roundedLng, lat: roundedLat, marker };
     setRoute(prev => [...prev, newPoint]);
 
-    // Get weather data using direct API call
-    console.log('Fetching weather data for point...');
-    const hasAPIKey = !!localStorage.getItem('openweather-api-key');
-    
-    let weatherData = null;
-    
-    if (hasAPIKey) {
-      // Use direct API call
-      weatherData = await getWeatherData(roundedLat, roundedLng);
-      console.log('Weather data from direct API:', weatherData);
-    } else {
-      // Use mock data if no API key
-      weatherData = await getMockWeatherData(roundedLat, roundedLng);
+    // Auto-generate route when we have 2+ points
+    if (route.length >= 1) {
+      await generateRoute([...route, newPoint]);
     }
-    
-    console.log('Weather data received:', weatherData);
-    
-    if (weatherData) {
-      const rainProbability = Math.min(
-        Math.round((weatherData.current.precipitation + weatherData.current.humidity / 2) / 2),
-        100
-      );
-      
-      const pointWithWeather = { 
-        ...newPoint, 
-        weather: weatherData.current, 
-        rainProbability 
-      };
-      setRouteWeather(prev => [...prev, pointWithWeather]);
-      
-      // Add weather overlay popup to the marker
-      if (marker && map.current) {
-        const popupElement = document.createElement('div');
-        const popup = new mapboxgl.Popup({ offset: 25 })
-          .setLngLat([roundedLng, roundedLat])
-          .setDOMContent(popupElement);
-        
-        // Create a simple weather display for the popup
-        popupElement.innerHTML = `
-          <div class="p-2 text-sm">
-            <div class="font-semibold">${weatherData.current.temperature}°C</div>
-            <div class="text-xs">${weatherData.current.condition}</div>
-            <div class="text-xs">Humidity: ${weatherData.current.humidity}%</div>
-          </div>
-        `;
-        
-        marker.setPopup(popup);
-      }
-    }
-  }, [getWeatherData, getMockWeatherData]);
-
-  const getRainColor = (rainIntensity: number): string => {
-    if (rainIntensity > 70) return '#dc2626'; // Red for heavy rain
-    if (rainIntensity > 40) return '#f59e0b'; // Amber for moderate rain
-    if (rainIntensity > 20) return '#3b82f6'; // Blue for light rain
-    return '#10b981'; // Green for no rain
-  };
+  }, [route, generateRoute]);
 
   // Real weather layer management
   const addWeatherLayer = useCallback(async () => {
