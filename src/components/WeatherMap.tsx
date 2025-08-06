@@ -31,22 +31,35 @@ const WeatherMap = () => {
   const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
   const [routeWeather, setRouteWeather] = useState<RoutePoint[]>([]);
 
-  // Get current location
+  // Get current location with Safari iOS compatibility
   useEffect(() => {
     console.log('Attempting to get current location...');
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        console.log('Location obtained:', position.coords);
-        setCurrentLocation([position.coords.longitude, position.coords.latitude]);
-      },
-      (error) => {
-        console.error('Error getting location:', error);
-        console.log('Using default location (New York)');
-        // Default to New York if geolocation fails
-        setCurrentLocation([-74.006, 40.7128]);
-      },
-      { timeout: 10000 } // Add timeout
-    );
+    
+    // For Safari iOS, use a more conservative approach
+    if ('geolocation' in navigator) {
+      const options = {
+        enableHighAccuracy: false, // Less demanding for Safari iOS
+        timeout: 5000, // Shorter timeout
+        maximumAge: 300000 // 5 minutes cache
+      };
+      
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          console.log('Location obtained:', position.coords);
+          setCurrentLocation([position.coords.longitude, position.coords.latitude]);
+        },
+        (error) => {
+          console.error('Geolocation error:', error.message);
+          console.log('Using default location (New York)');
+          // Default to New York if geolocation fails
+          setCurrentLocation([-74.006, 40.7128]);
+        },
+        options
+      );
+    } else {
+      console.log('Geolocation not supported, using default location');
+      setCurrentLocation([-74.006, 40.7128]);
+    }
   }, []);
 
   // Initialize map
@@ -67,31 +80,43 @@ const WeatherMap = () => {
     mapboxgl.accessToken = mapboxToken;
 
     try {
+      // Safari iOS compatibility settings
       map.current = new mapboxgl.Map({
         container: mapContainer.current,
         style: 'mapbox://styles/mapbox/dark-v11',
         center: currentLocation,
         zoom: 10,
+        preserveDrawingBuffer: true, // Better Safari compatibility
+        antialias: false, // Reduce memory usage on mobile
+        crossSourceCollisions: false // Improve performance
       });
 
       console.log('Map created successfully');
+      
+      // Wait for map to be fully loaded before adding controls
+      map.current.on('load', () => {
+        console.log('Map loaded successfully');
+        
+        // Add navigation controls after map loads
+        if (map.current) {
+          map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
+          
+          // Add current location marker
+          new mapboxgl.Marker({ color: '#3b82f6' })
+            .setLngLat(currentLocation)
+            .addTo(map.current);
+            
+          // Add click handler for route planning
+          map.current.on('click', (e) => {
+            addRoutePoint(e.lngLat.lng, e.lngLat.lat);
+          });
+        }
+      });
+      
     } catch (error) {
       console.error('Error creating map:', error);
       return;
     }
-
-    // Add navigation controls
-    map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
-
-    // Add current location marker
-    new mapboxgl.Marker({ color: '#3b82f6' })
-      .setLngLat(currentLocation)
-      .addTo(map.current);
-
-    // Add click handler for route planning
-    map.current.on('click', (e) => {
-      addRoutePoint(e.lngLat.lng, e.lngLat.lat);
-    });
 
     return () => {
       map.current?.remove();
