@@ -1,214 +1,294 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
-import { Card } from '@/components/ui/card';
-import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label';
-import { CloudRain, MapPin, Route, AlertTriangle, Layers, Navigation, Key } from 'lucide-react';
-import { useWeatherAPI, WeatherData } from '@/hooks/useWeatherAPI';
-import { useMockWeather } from '@/hooks/useMockWeather';
+import { Cloud, CloudRain, Sun, AlertTriangle, MapPin, Wind, Droplets, Eye, Thermometer } from 'lucide-react';
+import AddressSearch from '@/components/AddressSearch';
 import { useRouting, RouteData } from '@/hooks/useRouting';
-import { useTimeBasedWeather } from '@/hooks/useTimeBasedWeather';
-import SecretForm from './SecretForm';
-import AddressSearch from './AddressSearch';
-import NavigationPanel from './NavigationPanel';
-import TimeControls from './TimeControls';
-import ApiKeySetup from './ApiKeySetup';
+import { useTimeBasedWeather, TimeBasedWeatherData } from '@/hooks/useTimeBasedWeather';
+import { useToast } from '@/hooks/use-toast';
+import ApiKeySetup from '@/components/ApiKeySetup';
+import TimeControls from '@/components/TimeControls';
 
+// Define types for our route and weather system
 interface RoutePoint {
-  lng: number;
   lat: number;
-  weather?: WeatherData;
-  rainProbability?: number;
-  marker?: mapboxgl.Marker;
-  arrivalTime?: Date;
+  lng: number;
+  name?: string;
 }
 
-interface RouteSegment {
-  coordinates: [number, number][];
-  rainIntensity: number;
-  arrivalTime: Date;
+interface WeatherData {
+  temperature: number;
+  condition: string;
+  precipitation: number;
+  humidity: number;
+  pressure: number;
+  windSpeed: number;
+  windDirection: number;
+  visibility: number;
+  uvIndex: number;
+  cloudCover: number;
 }
 
-const WeatherMap: React.FC = () => {
+const WeatherMap = () => {
   console.log('WeatherMap component rendering...');
   
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
-  const [mapboxToken, setMapboxToken] = useState(() => {
-    const stored = localStorage.getItem('mapbox-token');
-    return stored || '';
-  });
-  const [showTokenInput, setShowTokenInput] = useState(() => {
-    const stored = localStorage.getItem('mapbox-token');
-    return !stored;
-  });
-  const [route, setRoute] = useState<RoutePoint[]>([]);
-  const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
-  const [routeWeather, setRouteWeather] = useState<RoutePoint[]>([]);
-  const [showWeatherLayer, setShowWeatherLayer] = useState(false);
-  const [weatherMarkers, setWeatherMarkers] = useState<mapboxgl.Marker[]>([]);
-  const [hasWeatherAPI, setHasWeatherAPI] = useState(true);
+  
+  // Core state
+  const [mapboxToken, setMapboxToken] = useState<string>('');
+  const [showTokenInput, setShowTokenInput] = useState(false);
+  const [hasWeatherAPI, setHasApiKey] = useState(false);
+  const [currentLocation, setCurrentLocation] = useState<[number, number]>([-74.006, 40.7128]);
+  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  
+  // Route and navigation state
+  const [routePoints, setRoutePoints] = useState<RoutePoint[]>([]);
   const [currentRoute, setCurrentRoute] = useState<RouteData | null>(null);
   const [isNavigating, setIsNavigating] = useState(false);
-  const [currentStep, setCurrentStep] = useState(0);
-  const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
-  const [currentHour, setCurrentHour] = useState(() => new Date().getHours());
+  const [currentNavigationStep, setCurrentNavigationStep] = useState(0);
+  
+  // Weather and time state
+  const [currentHour, setCurrentHour] = useState(new Date().getHours());
   const [isAnimating, setIsAnimating] = useState(false);
-  const [departureTime, setDepartureTime] = useState(() => new Date());
-  const [routeSegments, setRouteSegments] = useState<RouteSegment[]>([]);
+  const [departureTime, setDepartureTime] = useState(new Date());
+  
+  // Route weather analysis
+  const [routeWeather, setRouteWeather] = useState<Array<{
+    lat: number;
+    lng: number;
+    weather?: WeatherData;
+    rainProbability?: number;
+  }>>([]);
   const [showApiKeySetup, setShowApiKeySetup] = useState(false);
-  const [hasApiKey, setHasApiKey] = useState(false);
 
-  const { getWeatherData, loading } = useWeatherAPI();
-  const { getMockWeatherData } = useMockWeather();
-  const { getRoute, loading: routeLoading } = useRouting(mapboxToken);
-  const { getTimeBasedWeather, calculateArrivalWeather } = useTimeBasedWeather();
+  const { toast } = useToast();
+  const { getRoute, loading: routeLoading, error: routeError } = useRouting(mapboxToken);
+  const { getTimeBasedWeather } = useTimeBasedWeather();
 
+  console.log('Rendering state:', {
+    hasWeatherAPI,
+    showTokenInput,
+    mapboxToken: mapboxToken ? 'present' : 'missing'
+  });
+
+  console.log('Route state:', {
+    routeLength: routePoints.length,
+    currentRoute: !!currentRoute
+  });
+
+  // Get precipitation color based on intensity
   const getPrecipitationColor = useCallback((precipitation: number): string => {
-    if (precipitation > 5) return '#dc2626'; // Red for heavy rain
-    if (precipitation > 2) return '#f59e0b'; // Amber for moderate rain
-    if (precipitation > 0.5) return '#3b82f6'; // Blue for light rain
-    return '#10b981'; // Green for no rain
+    if (precipitation === 0) return '#4ade80'; // Green - no rain
+    if (precipitation < 1) return '#fbbf24'; // Yellow - light rain
+    if (precipitation < 5) return '#f97316'; // Orange - moderate rain
+    return '#ef4444'; // Red - heavy rain
   }, []);
 
-  const visualizeWeatherRoute = useCallback(async (routeData: any, departureTime: Date) => {
+  const visualizeWeatherRoute = useCallback(async (routeData: RouteData, departureTime: Date) => {
     if (!map.current) return;
-    
-    // Sample points along the route for weather data
-    const routeCoordinates = routeData.geometry.coordinates;
-    const sampleInterval = Math.max(1, Math.floor(routeCoordinates.length / 20)); // Sample ~20 points
-    const sampledCoordinates = routeCoordinates.filter((_: any, index: number) => index % sampleInterval === 0);
 
-    // Fetch weather data for sampled points
-    const hourlyForecasts: { [coordinate: string]: { [hour: number]: any } } = {};
+    // Sample points along the route more frequently for better resolution
+    const coordinates = routeData.geometry.coordinates;
+    const samplePoints: Array<{ coordinate: [number, number], arrivalTime: Date }> = [];
     
-    for (const coord of sampledCoordinates) {
-      const apiKey = localStorage.getItem('openweather-api-key');
-      if (!apiKey) continue;
-      
-      try {
-        // Get weather forecast for this coordinate
-        const response = await fetch(
-          `https://api.openweathermap.org/data/2.5/forecast?lat=${coord[1]}&lon=${coord[0]}&appid=${apiKey}&units=metric`
-        );
-        
-        if (response.ok) {
-          const forecastData = await response.json();
-          const coordKey = `${coord[0]},${coord[1]}`;
-          
-          // Process forecast into hourly format
-          const hourlyForecast: { [hour: number]: any } = {};
-          forecastData.list.forEach((item: any) => {
-            const forecastTime = new Date(item.dt * 1000);
-            const hourKey = forecastTime.getHours();
-            
-            hourlyForecast[hourKey] = {
-              temperature: Math.round(item.main.temp),
-              humidity: item.main.humidity,
-              precipitation: item.rain?.['3h'] || 0,
-              condition: item.weather[0].main,
-              description: item.weather[0].description,
-              windSpeed: Math.round(item.wind.speed * 3.6),
-              pressure: item.main.pressure,
-              visibility: 10,
-              icon: item.weather[0].icon
-            };
-          });
-          
-          hourlyForecasts[coordKey] = hourlyForecast;
-        }
-      } catch (error) {
-        console.error('Error fetching weather for coordinate:', error);
-      }
+    // Calculate timing for each point with higher resolution
+    const totalDistance = routeData.distance;
+    const totalDuration = routeData.duration;
+    const sampleInterval = Math.max(1, Math.floor(coordinates.length / 50)); // More sample points
+    
+    for (let i = 0; i < coordinates.length; i += sampleInterval) {
+      const progress = i / (coordinates.length - 1);
+      const arrivalTime = new Date(departureTime.getTime() + progress * totalDuration * 1000);
+      samplePoints.push({
+        coordinate: coordinates[i] as [number, number],
+        arrivalTime
+      });
     }
 
-    // Calculate weather conditions along route based on timing
-    const weatherAlongRoute = calculateArrivalWeather(
-      routeCoordinates,
-      departureTime,
-      routeData.duration,
-      hourlyForecasts
+    // Add the final point
+    if (coordinates.length > 0) {
+      const finalTime = new Date(departureTime.getTime() + totalDuration * 1000);
+      samplePoints.push({
+        coordinate: coordinates[coordinates.length - 1] as [number, number],
+        arrivalTime: finalTime
+      });
+    }
+
+    // Fetch weather for each sample point
+    const weatherSegments = await Promise.all(
+      samplePoints.map(async (point) => {
+        const weather = await getTimeBasedWeather(point.coordinate[1], point.coordinate[0], point.arrivalTime);
+        return {
+          coordinate: point.coordinate,
+          arrivalTime: point.arrivalTime,
+          weather: weather?.current || {
+            temperature: 20,
+            condition: 'Clear',
+            precipitation: 0,
+            humidity: 50,
+            pressure: 1013,
+            windSpeed: 5,
+            windDirection: 0,
+            visibility: 10000,
+            uvIndex: 3,
+            cloudCover: 0
+          }
+        };
+      })
     );
 
-    // Create route line with weather-based coloring
-    const routeLineFeatures = weatherAlongRoute.map((segment, index) => {
-      const precipitation = segment.weather.precipitation || 0;
-      const color = getPrecipitationColor(precipitation);
+    // Remove existing route layers and markers
+    if (map.current.getLayer('route-line')) {
+      map.current.removeLayer('route-line');
+    }
+    if (map.current.getSource('route')) {
+      map.current.removeSource('route');
+    }
+
+    // Clear existing weather markers
+    const existingMarkers = document.querySelectorAll('[data-weather-marker="true"]');
+    existingMarkers.forEach(marker => marker.remove());
+
+    // Create multiple line segments with different colors based on precipitation
+    const lineSegments = [];
+    for (let i = 0; i < weatherSegments.length - 1; i++) {
+      const segment = weatherSegments[i];
+      const nextSegment = weatherSegments[i + 1];
       
-      return {
-        type: 'Feature' as const,
+      // Interpolate between segment coordinates for smoother line
+      const segmentCoords = [];
+      const startIdx = coordinates.findIndex(coord => 
+        Math.abs(coord[0] - segment.coordinate[0]) < 0.001 && 
+        Math.abs(coord[1] - segment.coordinate[1]) < 0.001
+      );
+      const endIdx = coordinates.findIndex(coord => 
+        Math.abs(coord[0] - nextSegment.coordinate[0]) < 0.001 && 
+        Math.abs(coord[1] - nextSegment.coordinate[1]) < 0.001
+      );
+      
+      if (startIdx !== -1 && endIdx !== -1) {
+        for (let j = startIdx; j <= endIdx; j++) {
+          segmentCoords.push(coordinates[j]);
+        }
+      } else {
+        segmentCoords.push(segment.coordinate, nextSegment.coordinate);
+      }
+
+      lineSegments.push({
+        type: 'Feature',
         properties: {
-          color,
-          precipitation,
+          color: getPrecipitationColor(segment.weather.precipitation),
+          precipitation: segment.weather.precipitation,
           temperature: segment.weather.temperature,
           condition: segment.weather.condition,
           arrivalTime: segment.arrivalTime.toLocaleTimeString()
         },
         geometry: {
-          type: 'LineString' as const,
-          coordinates: [
-            segment.coordinate,
-            weatherAlongRoute[index + 1]?.coordinate || segment.coordinate
-          ]
+          type: 'LineString',
+          coordinates: segmentCoords
         }
-      };
-    });
-
-    // Add route source and layer
-    if (map.current.getSource('weather-route')) {
-      map.current.removeLayer('weather-route');
-      map.current.removeSource('weather-route');
+      });
     }
 
-    map.current.addSource('weather-route', {
+    // Add route source and layer
+    map.current.addSource('route', {
       type: 'geojson',
       data: {
         type: 'FeatureCollection',
-        features: routeLineFeatures
+        features: lineSegments
       }
     });
 
     map.current.addLayer({
-      id: 'weather-route',
+      id: 'route-line',
       type: 'line',
-      source: 'weather-route',
-      layout: {
-        'line-join': 'round',
-        'line-cap': 'round'
-      },
+      source: 'route',
       paint: {
         'line-color': ['get', 'color'],
-        'line-width': 6,
-        'line-opacity': 0.8
+        'line-width': 8,
+        'line-opacity': 0.9
       }
     });
 
-    // Add weather indicators
-    const weatherIndicators = weatherAlongRoute.filter((_, index) => index % 5 === 0); // Every 5th point
-    
-    weatherIndicators.forEach((segment) => {
-      const marker = new mapboxgl.Marker({
-        color: getPrecipitationColor(segment.weather.precipitation),
-        scale: 0.8
-      })
+    // Add hover effect to route segments
+    map.current.on('mouseenter', 'route-line', (e) => {
+      map.current!.getCanvas().style.cursor = 'pointer';
+    });
+
+    map.current.on('mouseleave', 'route-line', () => {
+      map.current!.getCanvas().style.cursor = '';
+    });
+
+    // Add click popup for route segments
+    map.current.on('click', 'route-line', (e) => {
+      if (!e.features || e.features.length === 0) return;
+      
+      const feature = e.features[0];
+      const precipitation = feature.properties?.precipitation || 0;
+      const temperature = feature.properties?.temperature || 0;
+      const condition = feature.properties?.condition || 'Unknown';
+      const arrivalTime = feature.properties?.arrivalTime || '';
+      const color = getPrecipitationColor(precipitation);
+      
+      new mapboxgl.Popup()
+        .setLngLat(e.lngLat)
+        .setHTML(`
+          <div class="p-3 min-w-48">
+            <div class="font-semibold text-lg">${Math.round(temperature)}°C</div>
+            <div class="text-sm font-medium">${condition}</div>
+            <div class="text-xs mt-2 space-y-1">
+              <div>💧 Precipitation: ${precipitation}mm/h</div>
+              <div>🕐 Arrival: ${arrivalTime}</div>
+              <div class="flex items-center mt-2">
+                <span class="inline-block w-3 h-3 rounded mr-2" style="background-color: ${color}"></span>
+                Weather intensity
+              </div>
+            </div>
+          </div>
+        `)
+        .addTo(map.current!);
+    });
+
+    // Add weather markers at key points
+    weatherSegments.forEach((segment, index) => {
+      if (index % 4 !== 0 && index !== weatherSegments.length - 1) return; // Show every 4th marker plus end
+
+      const markerElement = document.createElement('div');
+      markerElement.className = 'weather-marker';
+      markerElement.setAttribute('data-weather-marker', 'true');
+      markerElement.style.cssText = `
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        border: 2px solid white;
+        background-color: ${getPrecipitationColor(segment.weather.precipitation)};
+        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        cursor: pointer;
+      `;
+
+      new mapboxgl.Marker(markerElement)
         .setLngLat(segment.coordinate)
         .setPopup(
-          new mapboxgl.Popup({ offset: 25 }).setHTML(`
-            <div class="p-3">
-              <div class="font-semibold">${segment.weather.temperature}°C</div>
-              <div class="text-sm">${segment.weather.condition}</div>
-              <div class="text-xs">Precipitation: ${segment.weather.precipitation}mm</div>
-              <div class="text-xs">Arrival: ${segment.arrivalTime.toLocaleTimeString()}</div>
+          new mapboxgl.Popup({ offset: 25, closeButton: false }).setHTML(`
+            <div class="p-3 min-w-48">
+              <div class="font-semibold text-lg">${Math.round(segment.weather.temperature)}°C</div>
+              <div class="text-sm font-medium">${segment.weather.condition}</div>
+              <div class="text-xs mt-2 space-y-1">
+                <div>💧 Precipitation: ${segment.weather.precipitation}mm/h</div>
+                <div>💨 Wind: ${Math.round(segment.weather.windSpeed)}km/h</div>
+                <div>☁️ Clouds: ${segment.weather.cloudCover}%</div>
+                <div>🕐 Arrival: ${segment.arrivalTime.toLocaleTimeString()}</div>
+              </div>
             </div>
           `)
         )
         .addTo(map.current!);
     });
-  }, [getTimeBasedWeather, calculateArrivalWeather, getPrecipitationColor]);
+  }, [getTimeBasedWeather, getPrecipitationColor]);
 
   const generateRoute = useCallback(async (routePoints: RoutePoint[]) => {
     if (routePoints.length < 2 || !mapboxToken) return;
@@ -220,8 +300,9 @@ const WeatherMap: React.FC = () => {
     if (!routeData) return;
 
     // Generate weather-based route visualization
-    await visualizeWeatherRoute(routeData, new Date());
-  }, [mapboxToken, getRoute, visualizeWeatherRoute]);
+    await visualizeWeatherRoute(routeData, departureTime);
+    setCurrentRoute(routeData);
+  }, [mapboxToken, getRoute, visualizeWeatherRoute, departureTime]);
 
   // Check for existing API key on mount and set the provided key
   useEffect(() => {
@@ -298,207 +379,76 @@ const WeatherMap: React.FC = () => {
               const existingMarkers = document.querySelectorAll('[data-user-location="true"]');
               existingMarkers.forEach(marker => marker.remove());
               
-              // Add new user location marker with mobile-friendly styling
-              const markerElement = document.createElement('div');
-              markerElement.setAttribute('data-user-location', 'true');
-              markerElement.className = 'w-6 h-6 bg-green-500 rounded-full border-4 border-white shadow-lg pulse';
-              markerElement.style.cssText = `
-                animation: pulse 2s infinite;
-                transform: translate(-50%, -50%);
-                position: relative;
-              `;
+              // Add new user location marker
+              const el = document.createElement('div');
+              el.className = 'user-location-marker';
+              el.setAttribute('data-user-location', 'true');
+              el.innerHTML = '📍';
+              el.style.fontSize = '20px';
+              el.style.textAlign = 'center';
               
-              new mapboxgl.Marker({ 
-                element: markerElement,
-                anchor: 'center'
-              })
+              new mapboxgl.Marker(el)
                 .setLngLat(newLocation)
                 .addTo(map.current);
             }
           },
           (error) => {
-            console.error('GPS tracking error:', error.message);
-            // More specific error handling for mobile
-            switch(error.code) {
-              case error.PERMISSION_DENIED:
-                console.log('Location permission denied by user');
-                break;
-              case error.POSITION_UNAVAILABLE:
-                console.log('Location information unavailable');
-                break;
-              case error.TIMEOUT:
-                console.log('Location request timeout');
-                break;
-            }
-            
-            // Fallback to one-time location request
-            navigator.geolocation.getCurrentPosition(
-              (position) => {
-                const fallbackLocation: [number, number] = [
-                  position.coords.longitude, 
-                  position.coords.latitude
-                ];
-                setCurrentLocation(fallbackLocation);
-                setUserLocation(fallbackLocation);
-              },
-              () => {
-                console.log('Using default location (New York)');
-                setCurrentLocation([-74.006, 40.7128]);
-              },
-              options
-            );
+            console.log('Geolocation error:', error);
+            // Keep default location on error
           },
           options
         );
 
+        // Store watchId to clear later if needed
         return () => {
-          if (watchId !== undefined) {
-            navigator.geolocation.clearWatch(watchId);
-          }
+          navigator.geolocation.clearWatch(watchId);
         };
       } catch (error) {
-        console.error('Error requesting location permission:', error);
-        setCurrentLocation([-74.006, 40.7128]);
+        console.log('Geolocation setup error:', error);
       }
     };
 
-    const cleanup = requestLocation();
-    return () => {
-      if (cleanup instanceof Promise) {
-        cleanup.then(cleanupFn => cleanupFn && cleanupFn());
-      }
-    };
+    requestLocation();
   }, [currentLocation]);
 
-  // Initialize map
+  // Check for existing tokens on mount
   useEffect(() => {
-    console.log('Map initialization check:', { 
-      hasContainer: !!mapContainer.current, 
-      hasToken: !!mapboxToken, 
-      hasLocation: !!currentLocation 
-    });
-    
-    if (!mapContainer.current || !mapboxToken || !currentLocation) {
-      console.log('Map initialization skipped - missing requirements');
-      return;
+    const savedToken = localStorage.getItem('mapbox-token');
+    if (savedToken) {
+      setMapboxToken(savedToken);
+    } else {
+      setShowTokenInput(true);
     }
+  }, []);
 
-    console.log('Initializing map with token and location:', { mapboxToken: mapboxToken.substring(0, 10) + '...', currentLocation });
-    
-    mapboxgl.accessToken = mapboxToken;
-
-    try {
-      // Safari iOS compatibility settings with mobile optimizations
-      map.current = new mapboxgl.Map({
-        container: mapContainer.current,
-        style: 'mapbox://styles/mapbox/dark-v11',
-        center: currentLocation,
-        zoom: 10,
-        preserveDrawingBuffer: true, // Better Safari compatibility
-        antialias: false, // Reduce memory usage on mobile
-        crossSourceCollisions: false, // Improve performance
-        touchZoomRotate: true, // Enable touch controls
-        touchPitch: true, // Enable touch pitch
-        dragRotate: true, // Enable drag rotation
-        doubleClickZoom: true, // Enable double tap zoom
-        keyboard: false, // Disable keyboard for mobile
-        scrollZoom: true // Enable scroll zoom
-      });
-
-      console.log('Map created successfully');
-      
-      // Wait for map to be fully loaded before adding controls
-      map.current.on('load', () => {
-        console.log('Map loaded successfully');
-        
-        // Add navigation controls after map loads
-        if (map.current) {
-          map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
-          
-          // Add current location marker
-          new mapboxgl.Marker({ color: '#3b82f6' })
-            .setLngLat(currentLocation)
-            .addTo(map.current);
-            
-          // Add click handler for route planning
-          map.current.on('click', (e) => {
-            addRoutePoint(e.lngLat.lng, e.lngLat.lat);
-          });
-        }
-      });
-
-      // Handle map style loading errors
-      map.current.on('error', (e) => {
-        console.error('Map error:', e.error);
-        if (e.error.message.includes('401')) {
-          console.error('Invalid Mapbox token - please check your token');
-          alert('Invalid Mapbox token. Please check your token and try again.');
-          // Clear the invalid token
-          localStorage.removeItem('mapbox-token');
-          setShowTokenInput(true);
-        }
-      });
-      
-    } catch (error) {
-      console.error('Error creating map:', error);
-      return;
-    }
-
-    return () => {
-      map.current?.remove();
-    };
-  }, [mapboxToken, currentLocation]);
-
-  const addRoutePoint = useCallback(async (lng: number, lat: number) => {
-    // Round coordinates for consistency
-    const roundedLng = Math.round(lng * 10000) / 10000;
-    const roundedLat = Math.round(lat * 10000) / 10000;
-    
-    console.log('Adding route point:', { lng: roundedLng, lat: roundedLat });
-    
-    // Add marker to map
-    let marker: mapboxgl.Marker | undefined;
-    if (map.current) {
-      marker = new mapboxgl.Marker({ color: '#ef4444' })
-        .setLngLat([roundedLng, roundedLat])
-        .addTo(map.current);
-    }
-
-    const newPoint: RoutePoint = { lng: roundedLng, lat: roundedLat, marker };
-    setRoute(prev => [...prev, newPoint]);
-
-    // Auto-generate route when we have 2+ points
-    if (route.length >= 1) {
-      await generateRoute([...route, newPoint]);
-    }
-  }, [route, generateRoute]);
-
-  // Real weather layer management
+  // Add weather layer to the map with time-based functionality
   const addWeatherLayer = useCallback(async () => {
-    if (!map.current || !showWeatherLayer) return;
+    if (!map.current || !hasWeatherAPI) return;
 
-    const apiKey = localStorage.getItem('openweather-api-key');
-    if (!apiKey) {
-      console.log('No API key found, skipping weather layer');
-      return;
-    }
-
-    console.log('Adding real weather layer...');
+    console.log('Adding weather layer...');
     
-    try {
-      // Remove existing layers first
-      if (map.current.getLayer('precipitation-layer')) {
-        map.current.removeLayer('precipitation-layer');
+    // Function to update weather layer based on current hour
+    const updateWeatherLayer = (hour: number) => {
+      if (!map.current) return;
+      
+      // Remove existing weather layer
+      if (map.current.getLayer('weather-layer')) {
+        map.current.removeLayer('weather-layer');
       }
-      if (map.current.getSource('precipitation')) {
-        map.current.removeSource('precipitation');
+      if (map.current.getSource('weather-tiles')) {
+        map.current.removeSource('weather-tiles');
       }
 
-      // Add real weather layer from OpenWeatherMap (using clouds layer which is always visible)
-      map.current.addSource('weather', {
+      // Calculate timestamp for the selected hour
+      const targetDate = new Date();
+      targetDate.setHours(hour, 0, 0, 0);
+      const timestamp = Math.floor(targetDate.getTime() / 1000);
+
+      // Add precipitation layer for the selected time
+      map.current.addSource('weather-tiles', {
         type: 'raster',
         tiles: [
-          `https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=${apiKey}`
+          `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=ba3708802ed7275ee958045d0a9a0f99&date=${timestamp}`
         ],
         tileSize: 256
       });
@@ -506,420 +456,221 @@ const WeatherMap: React.FC = () => {
       map.current.addLayer({
         id: 'weather-layer',
         type: 'raster',
-        source: 'weather',
+        source: 'weather-tiles',
         paint: {
-          'raster-opacity': 0.5,
-          'raster-fade-duration': 300
+          'raster-opacity': 0.6
         }
       });
+    };
 
-      // Add event listeners to debug tile loading
-      map.current.on('sourcedata', (e) => {
-        if (e.sourceId === 'weather' && e.isSourceLoaded) {
-          console.log('Weather tiles loaded successfully');
-        }
+    // Initial load
+    updateWeatherLayer(currentHour);
+
+    // Store update function for external use
+    (window as any).updateWeatherLayer = updateWeatherLayer;
+  }, [hasWeatherAPI, currentHour]);
+
+  // Initialize map
+  useEffect(() => {
+    if (!mapContainer.current || !mapboxToken) return;
+
+    console.log('Map initialization starting...');
+    
+    try {
+      mapboxgl.accessToken = mapboxToken;
+      
+      map.current = new mapboxgl.Map({
+        container: mapContainer.current,
+        style: 'mapbox://styles/mapbox/streets-v12',
+        center: currentLocation,
+        zoom: 10,
+        pitch: 0,
+        bearing: 0
+      });
+
+      map.current.on('load', () => {
+        console.log('Map loaded successfully');
+        addWeatherLayer();
       });
 
       map.current.on('error', (e) => {
         console.error('Map error:', e);
       });
-      
-      console.log('Real weather layer added successfully');
-    } catch (error) {
-      console.error('Error adding weather layer:', error);
-    }
-  }, [showWeatherLayer]);
 
-  const removeWeatherLayer = useCallback(() => {
-    if (!map.current) return;
-    
-    console.log('Removing weather layer...');
-    try {
-      if (map.current.getLayer('weather-layer')) {
-        map.current.removeLayer('weather-layer');
-      }
-      if (map.current.getSource('weather')) {
-        map.current.removeSource('weather');
-      }
-      console.log('Weather layer removed successfully');
-    } catch (error) {
-      console.error('Error removing weather layer:', error);
-    }
-  }, []);
+      // Add navigation controls
+      map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
-  // Toggle weather layer when switch changes
+      // Add click handler for adding route points
+      map.current.on('click', (e) => {
+        const { lng, lat } = e.lngLat;
+        console.log('Map clicked at:', { lng, lat });
+        
+        const newPoint: RoutePoint = { lat, lng };
+        const newRoutePoints = [...routePoints, newPoint];
+        setRoutePoints(newRoutePoints);
+
+        // Add marker for the clicked point
+        new mapboxgl.Marker({ color: routePoints.length === 0 ? '#22c55e' : '#ef4444' })
+          .setLngLat([lng, lat])
+          .setPopup(
+            new mapboxgl.Popup({ offset: 25 }).setHTML(`
+              <div class="p-2">
+                <div class="font-semibold">${routePoints.length === 0 ? 'Start' : `Stop ${routePoints.length}`}</div>
+                <div class="text-sm text-gray-600">${lat.toFixed(4)}, ${lng.toFixed(4)}</div>
+              </div>
+            `)
+          )
+          .addTo(map.current!);
+
+        // Generate route if we have at least 2 points
+        if (newRoutePoints.length >= 2) {
+          generateRoute(newRoutePoints);
+        }
+      });
+
+    } catch (error) {
+      console.error('Map initialization error:', error);
+    }
+
+    return () => {
+      if (map.current) {
+        map.current.remove();
+      }
+    };
+  }, [mapboxToken, currentLocation, addWeatherLayer, routePoints, generateRoute]);
+
+  // Handle hour changes for time slider
   useEffect(() => {
-    if (showWeatherLayer) {
-      addWeatherLayer();
-    } else {
-      removeWeatherLayer();
+    console.log('Hour changed to:', currentHour);
+    if ((window as any).updateWeatherLayer) {
+      (window as any).updateWeatherLayer(currentHour);
     }
-  }, [showWeatherLayer, addWeatherLayer, removeWeatherLayer]);
+  }, [currentHour]);
 
-  const clearRoute = useCallback(() => {
-    // Remove all route markers
-    route.forEach(point => {
-      if (point.marker) {
-        point.marker.remove();
-      }
-    });
-    
-    // Clear weather markers
-    weatherMarkers.forEach(marker => marker.remove());
-    setWeatherMarkers([]);
-    
-    // Remove route from map
-    if (map.current) {
-      try {
-        if (map.current.getLayer('route')) {
-          map.current.removeLayer('route');
-        }
-        if (map.current.getSource('route')) {
-          map.current.removeSource('route');
-        }
-      } catch (error) {
-        console.warn('Could not remove route from map');
-      }
+  // Handle departure time changes
+  useEffect(() => {
+    if (routePoints.length >= 2 && currentRoute) {
+      generateRoute(routePoints);
     }
+  }, [departureTime, routePoints, currentRoute, generateRoute]);
+
+  const handleLocationSelect = (location: { lat: number; lng: number; address: string }) => {
+    console.log('Location selected:', location);
+    setCurrentLocation([location.lng, location.lat]);
     
-    setRoute([]);
-    setRouteWeather([]);
-    setCurrentRoute(null);
-    setRouteSegments([]);
-  }, [route, weatherMarkers]);
-
-  const planOptimalRoute = useCallback(async () => {
-    if (route.length < 2) return;
-
-    console.log('Planning route for points:', route);
-    const coordinates = route.map(point => [point.lng, point.lat] as [number, number]);
-    
-    const routeData = await getRoute(coordinates);
-    if (routeData && map.current) {
-      setCurrentRoute(routeData);
-      
-      // Remove existing route layers
-      try {
-        if (map.current.getLayer('route')) {
-          map.current.removeLayer('route');
-        }
-        if (map.current.getSource('route')) {
-          map.current.removeSource('route');
-        }
-      } catch (error) {
-        console.warn('Could not remove existing route layer');
-      }
-
-      // Add basic route first (always visible)
-      map.current.addSource('route', {
-        type: 'geojson',
-        data: {
-          type: 'Feature',
-          properties: {},
-          geometry: {
-            type: 'LineString',
-            coordinates: routeData.geometry.coordinates
-          }
-        }
-      });
-
-      map.current.addLayer({
-        id: 'route',
-        type: 'line',
-        source: 'route',
-        layout: {
-          'line-join': 'round',
-          'line-cap': 'round'
-        },
-        paint: {
-          'line-color': '#3b82f6',
-          'line-width': 6,
-          'line-opacity': 0.8
-        }
-      });
-
-      // Fit map to route bounds
-      const coordinates_flat = routeData.geometry.coordinates;
-      const bounds = coordinates_flat.reduce((bounds, coord) => {
-        return bounds.extend(coord as [number, number]);
-      }, new mapboxgl.LngLatBounds(coordinates_flat[0], coordinates_flat[0]));
-      
-      map.current.fitBounds(bounds, { padding: 50 });
-    }
-  }, [route, getRoute]);
-
-  const startNavigation = useCallback(() => {
-    if (currentRoute) {
-      setIsNavigating(true);
-      setCurrentStep(0);
-    }
-  }, [currentRoute]);
-
-  const stopNavigation = useCallback(() => {
-    setIsNavigating(false);
-    setCurrentStep(0);
-  }, []);
-
-  const handleLocationSelect = useCallback(async (lng: number, lat: number, placeName: string) => {
-    console.log('Location selected:', { lng, lat, placeName });
-    await addRoutePoint(lng, lat);
-    
-    // Center map on selected location
     if (map.current) {
       map.current.flyTo({
-        center: [lng, lat],
-        zoom: 14,
-        duration: 1000
+        center: [location.lng, location.lat],
+        zoom: 12,
+        duration: 2000
       });
     }
-  }, [addRoutePoint]);
+  };
 
-  const getWeatherColor = (condition: string) => {
-    switch (condition) {
-      case 'Clear': return 'bg-weather-clear';
-      case 'Cloudy': return 'bg-weather-cloudy';
-      case 'Light Rain': return 'bg-weather-rain';
-      case 'Heavy Rain': return 'bg-weather-storm';
-      case 'Thunderstorm': return 'bg-weather-danger';
-      default: return 'bg-secondary';
+  const handleApiKeySubmit = (apiKey: string) => {
+    localStorage.setItem('openweather-api-key', apiKey);
+    setHasApiKey(true);
+  };
+
+  // Clear route function
+  const clearRoute = () => {
+    setRoutePoints([]);
+    setCurrentRoute(null);
+    
+    if (map.current) {
+      // Remove route layer
+      if (map.current.getLayer('route-line')) {
+        map.current.removeLayer('route-line');
+      }
+      if (map.current.getSource('route')) {
+        map.current.removeSource('route');
+      }
+      
+      // Clear all markers except user location
+      const markers = document.querySelectorAll('.mapboxgl-marker:not([data-user-location="true"])');
+      markers.forEach(marker => marker.remove());
+      
+      // Clear weather markers
+      const weatherMarkers = document.querySelectorAll('[data-weather-marker="true"]');
+      weatherMarkers.forEach(marker => marker.remove());
     }
   };
 
-  const getRainIcon = (probability: number) => {
-    if (probability > 70) return <CloudRain className="h-4 w-4 text-weather-danger" />;
-    if (probability > 40) return <CloudRain className="h-4 w-4 text-weather-warning" />;
-    return <CloudRain className="h-4 w-4 text-weather-cloudy" />;
-  };
-
-  console.log('Rendering state:', { hasWeatherAPI, showTokenInput, mapboxToken });
-  console.log('Route state:', { routeLength: route.length, currentRoute: !!currentRoute });
-  
-  if (!hasWeatherAPI) {
-    console.log('Showing SecretForm...');
-    return <SecretForm onApiKeySet={() => setHasWeatherAPI(true)} />;
-  }
-
-  if (showTokenInput) {
-    console.log('Showing token input...');
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background p-4">
-        <Card className="w-full max-w-md p-6">
-          <div className="text-center mb-6">
-            <MapPin className="h-12 w-12 text-primary mx-auto mb-4" />
-            <h1 className="text-2xl font-bold mb-2">Weather Route Planner</h1>
-            <p className="text-muted-foreground">Enter your Mapbox token to get started</p>
-          </div>
-          
-          <div className="space-y-4">
-            <Input
-              type="password"
-              placeholder="Mapbox Public Token"
-              value={mapboxToken}
-              onChange={(e) => setMapboxToken(e.target.value)}
-            />
-            <Button 
-              onClick={() => handleTokenSubmit(mapboxToken)}
-              disabled={!mapboxToken}
-              className="w-full"
-            >
-              Initialize Map
-            </Button>
-          </div>
-          
-          <div className="mt-4 p-3 bg-muted/50 rounded-lg">
-            <p className="text-xs text-muted-foreground mb-2">
-              <strong>How to get your Mapbox token:</strong>
-            </p>
-            <ol className="text-xs text-muted-foreground space-y-1 list-decimal list-inside">
-              <li>Go to <a href="https://mapbox.com" target="_blank" className="text-primary hover:underline">mapbox.com</a></li>
-              <li>Sign up for a free account</li>
-              <li>Go to Account → Access tokens</li>
-              <li>Copy your "Default public token"</li>
-            </ol>
-          </div>
-        </Card>
-      </div>
-    );
-  }
-
   console.log('Rendering main weather map interface...');
-  console.log('AddressSearch props:', { mapboxToken: mapboxToken ? 'present' : 'missing' });
 
   return (
-    <div className="h-screen flex flex-col bg-background">
-      {/* Header with Address Search */}
-      <div className="bg-card border-b border-border p-4 space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-2">
-            <CloudRain className="h-6 w-6 text-primary" />
-            <h1 className="text-xl font-bold">Weather Route Planner</h1>
-          </div>
-          <div className="flex items-center space-x-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2">
-                <Switch
-                  id="weather-layer"
-                  checked={showWeatherLayer}
-                  onCheckedChange={setShowWeatherLayer}
-                />
-                <Label htmlFor="weather-layer" className="flex items-center space-x-1">
-                  <Layers className="h-4 w-4" />
-                  <span>Weather</span>
-                </Label>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowApiKeySetup(true)}
-                className="ml-2"
-              >
-                <Key className="h-4 w-4 mr-1" />
-                {hasApiKey ? 'Update' : 'Add'} API Key
-              </Button>
-            </div>
-            <div className="flex space-x-2">
-              {route.length >= 2 && (
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  onClick={planOptimalRoute}
-                  disabled={routeLoading}
-                >
-                  <Navigation className="h-4 w-4 mr-2" />
-                  {routeLoading ? 'Planning...' : 'Plan Route'}
-                </Button>
-              )}
-              <Button variant="outline" size="sm" onClick={clearRoute}>
-                <Route className="h-4 w-4 mr-2" />
-                Clear
-              </Button>
-            </div>
+    <div className="relative w-full h-screen overflow-hidden">
+      {!hasWeatherAPI && (
+        <ApiKeySetup 
+          onApiKeySubmit={handleApiKeySubmit}
+          service="OpenWeatherMap"
+          placeholder="Enter your OpenWeatherMap API key"
+        />
+      )}
+      
+      {showTokenInput && (
+        <div className="absolute top-4 left-4 z-10 bg-card border border-border rounded-lg p-4 shadow-lg">
+          <h3 className="font-semibold mb-2">Mapbox Token Required</h3>
+          <p className="text-sm text-muted-foreground mb-3">
+            Enter your Mapbox public token to display the map
+          </p>
+          <div className="flex space-x-2">
+            <input
+              type="text"
+              placeholder="pk.eyJ1..."
+              className="flex-1 px-3 py-2 border border-border rounded-md text-sm"
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') {
+                  handleTokenSubmit((e.target as HTMLInputElement).value);
+                }
+              }}
+            />
+            <Button
+              size="sm"
+              onClick={() => {
+                const input = document.querySelector('input[placeholder="pk.eyJ1..."]') as HTMLInputElement;
+                if (input) handleTokenSubmit(input.value);
+              }}
+            >
+              Save
+            </Button>
           </div>
         </div>
-        
-        {/* Address Search Bar and Time Controls */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2">
-            <AddressSearch 
-              onLocationSelect={handleLocationSelect}
-              onStartNavigation={startNavigation}
-              mapboxToken={mapboxToken}
-            />
-          </div>
-          <div>
-            <TimeControls
-              currentHour={currentHour}
-              isAnimating={isAnimating}
-              onHourChange={setCurrentHour}
-              onToggleAnimation={() => setIsAnimating(!isAnimating)}
-              departureTime={departureTime}
-              onDepartureTimeChange={setDepartureTime}
-            />
-          </div>
-        </div>
-      </div>
+      )}
 
-      <div className="flex-1 flex">
-        {/* Map */}
-        <div className="flex-1 relative touch-none">
-          <div 
-            ref={mapContainer} 
-            className="absolute inset-0 mapbox-map"
-            style={{ 
-              touchAction: 'pan-x pan-y',
-              WebkitUserSelect: 'none',
-              WebkitTouchCallout: 'none'
-            }}
+      <div ref={mapContainer} className="w-full h-full" />
+      
+      {hasWeatherAPI && (
+        <div className="absolute top-4 right-4 z-10 space-y-2">
+          <TimeControls
+            currentHour={currentHour}
+            isAnimating={isAnimating}
+            onHourChange={setCurrentHour}
+            onToggleAnimation={() => setIsAnimating(!isAnimating)}
+            departureTime={departureTime}
+            onDepartureTimeChange={setDepartureTime}
           />
-          
-          {/* Route Info Overlay */}
-          {route.length > 0 && (
-            <div className="absolute top-4 left-4 bg-card/95 backdrop-blur-sm border border-border rounded-lg p-4 max-w-xs">
-              <div className="flex items-center space-x-2 mb-2">
-                <Route className="h-4 w-4 text-primary" />
-                <span className="font-semibold">Route Points: {route.length}</span>
-              </div>
-              <p className="text-sm text-muted-foreground">Click on map to add waypoints</p>
-              {currentRoute && (
-                <div className="mt-2 text-xs">
-                  <div>Distance: {(currentRoute.distance / 1000).toFixed(1)} km</div>
-                  <div>Duration: {Math.round(currentRoute.duration / 60)} min</div>
-                </div>
-              )}
-            </div>
+          <AddressSearch
+            mapboxToken={mapboxToken}
+            onLocationSelect={handleLocationSelect}
+          />
+          {routePoints.length > 0 && (
+            <Button onClick={clearRoute} variant="outline" size="sm">
+              Clear Route
+            </Button>
           )}
         </div>
-
-        {/* Navigation Panel */}
-        {currentRoute && (
-          <NavigationPanel
-            route={currentRoute}
-            currentStep={currentStep}
-            isNavigating={isNavigating}
-            onStartNavigation={startNavigation}
-            onStopNavigation={stopNavigation}
-          />
-        )}
-
-        {/* Weather Panel */}
-        {!currentRoute && routeWeather.length > 0 && (
-          <div className="w-80 bg-card border-l border-border overflow-y-auto">
-            <div className="p-4 border-b border-border">
-              <h2 className="font-semibold flex items-center">
-                <AlertTriangle className="h-4 w-4 mr-2 text-weather-warning" />
-                Route Weather Analysis
-              </h2>
-            </div>
-            
-            <div className="p-4 space-y-4">
-              {routeWeather.map((point, index) => (
-                <Card key={index} className="p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium">Waypoint {index + 1}</span>
-                    <Badge variant="outline" className={getWeatherColor(point.weather?.condition || '')}>
-                      {point.weather?.condition}
-                    </Badge>
-                  </div>
-                  
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">Temp:</span>
-                      <span className="ml-1">{point.weather?.temperature}°C</span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Wind:</span>
-                      <span className="ml-1">{point.weather?.windSpeed} km/h</span>
-                    </div>
-                  </div>
-                  
-                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-border">
-                    <div className="flex items-center space-x-1">
-                      {getRainIcon(point.rainProbability || 0)}
-                      <span className="text-sm">Rain Probability</span>
-                    </div>
-                    <span className="text-sm font-medium">{point.rainProbability}%</span>
-                  </div>
-                  
-                  {(point.rainProbability || 0) > 60 && (
-                    <div className="mt-2 p-2 bg-weather-warning/20 rounded text-xs">
-                      <AlertTriangle className="h-3 w-3 inline mr-1" />
-                      High rain probability at this location
-                    </div>
-                  )}
-                </Card>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
+      )}
       
-      {showApiKeySetup && (
-        <ApiKeySetup 
-          onApiKeySet={() => {
-            setShowApiKeySetup(false);
-            setHasApiKey(true);
-          }} 
-        />
+      {routePoints.length > 0 && (
+        <div className="absolute bottom-4 left-4 z-10 bg-card border border-border rounded-lg p-3 shadow-lg">
+          <div className="text-sm font-medium mb-1">
+            Route: {routePoints.length} point{routePoints.length !== 1 ? 's' : ''}
+          </div>
+          <div className="text-xs text-muted-foreground">
+            Click map to add waypoints • Colors show precipitation intensity
+          </div>
+        </div>
       )}
     </div>
   );
