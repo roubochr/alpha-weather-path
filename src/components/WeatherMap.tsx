@@ -12,6 +12,8 @@ import { useToast } from '@/hooks/use-toast';
 import ApiKeySetup from '@/components/ApiKeySetup';
 import TimeControls from '@/components/TimeControls';
 import WeatherLegend from '@/components/WeatherLegend';
+import OverlayControls from '@/components/OverlayControls';
+import WeatherForecast from '@/components/WeatherForecast';
 
 // Define types for our route and weather system
 interface RoutePoint {
@@ -53,6 +55,14 @@ const WeatherMap = () => {
   const [currentHour, setCurrentHour] = useState(new Date().getHours());
   const [isAnimating, setIsAnimating] = useState(false);
   const [departureTime, setDepartureTime] = useState(new Date());
+  
+  // Overlay control state
+  const [showPrecipitation, setShowPrecipitation] = useState(true);
+  const [showClouds, setShowClouds] = useState(true);
+  
+  // Weather forecast state
+  const [departureWeather, setDepartureWeather] = useState<any>(null);
+  const [arrivalWeather, setArrivalWeather] = useState<any>(null);
   
   // Route weather analysis
   const [routeWeather, setRouteWeather] = useState<Array<{
@@ -529,14 +539,14 @@ const WeatherMap = () => {
 
     console.log('Adding weather layer...');
     
-    // Function to update weather layer based on current hour
-    const updateWeatherLayer = (hour: number) => {
+    // Function to update weather layer based on current hour and overlay settings
+    const updateWeatherLayer = (hour: number, precipitation: boolean, clouds: boolean) => {
       if (!map.current || !map.current.isStyleLoaded()) {
         console.log('Map style not loaded yet, skipping weather layer update');
         return;
       }
       
-      console.log('Updating weather layer for hour:', hour);
+      console.log('Updating weather layer for hour:', hour, 'precipitation:', precipitation, 'clouds:', clouds);
       
       try {
         // Remove existing weather layers
@@ -552,43 +562,47 @@ const WeatherMap = () => {
           }
         });
 
-        // Add precipitation layer
-        map.current.addSource('precipitation-tiles', {
-          type: 'raster',
-          tiles: [
-            `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=ba3708802ed7275ee958045d0a9a0f99`
-          ],
-          tileSize: 256
-        });
+        // Add precipitation layer if enabled
+        if (precipitation) {
+          map.current.addSource('precipitation-tiles', {
+            type: 'raster',
+            tiles: [
+              `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=ba3708802ed7275ee958045d0a9a0f99`
+            ],
+            tileSize: 256
+          });
 
-        map.current.addLayer({
-          id: 'weather-precipitation',
-          type: 'raster',
-          source: 'precipitation-tiles',
-          paint: {
-            'raster-opacity': 0.7
-          }
-        });
+          map.current.addLayer({
+            id: 'weather-precipitation',
+            type: 'raster',
+            source: 'precipitation-tiles',
+            paint: {
+              'raster-opacity': 0.7
+            }
+          });
+        }
 
-        // Add clouds layer for additional weather context
-        map.current.addSource('cloud-tiles', {
-          type: 'raster',
-          tiles: [
-            `https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=ba3708802ed7275ee958045d0a9a0f99`
-          ],
-          tileSize: 256
-        });
+        // Add clouds layer if enabled
+        if (clouds) {
+          map.current.addSource('cloud-tiles', {
+            type: 'raster',
+            tiles: [
+              `https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=ba3708802ed7275ee958045d0a9a0f99`
+            ],
+            tileSize: 256
+          });
 
-        map.current.addLayer({
-          id: 'weather-clouds',
-          type: 'raster',
-          source: 'cloud-tiles',
-          paint: {
-            'raster-opacity': 0.4
-          }
-        });
+          map.current.addLayer({
+            id: 'weather-clouds',
+            type: 'raster',
+            source: 'cloud-tiles',
+            paint: {
+              'raster-opacity': 0.4
+            }
+          });
+        }
         
-        console.log('Weather layers added successfully');
+        console.log('Weather layers updated successfully');
       } catch (error) {
         console.error('Error adding weather layer:', error);
       }
@@ -599,9 +613,9 @@ const WeatherMap = () => {
     
     // Only update if style is loaded
     if (map.current.isStyleLoaded()) {
-      updateWeatherLayer(currentHour);
+      updateWeatherLayer(currentHour, showPrecipitation, showClouds);
     }
-  }, [hasWeatherAPI, currentHour]);
+  }, [hasWeatherAPI, currentHour, showPrecipitation, showClouds]);
 
   // Initialize map
   useEffect(() => {
@@ -649,13 +663,20 @@ const WeatherMap = () => {
 
         // Add marker for the clicked point
         if (map.current && map.current.isStyleLoaded()) {
-          new mapboxgl.Marker({ color: routePoints.length === 0 ? '#22c55e' : '#ef4444' })
+          const markerColor = routePoints.length === 0 ? '#22c55e' : '#ef4444';
+          const markerElement = document.createElement('div');
+          markerElement.innerHTML = routePoints.length === 0 ? '🏁' : '🎯';
+          markerElement.style.fontSize = '24px';
+          markerElement.style.cursor = 'pointer';
+          markerElement.setAttribute('data-route-marker', 'true');
+          
+          new mapboxgl.Marker(markerElement)
             .setLngLat([lng, lat])
             .setPopup(
               new mapboxgl.Popup({ offset: 25 }).setHTML(`
-                <div class="p-2">
-                  <div class="font-semibold">${routePoints.length === 0 ? 'Start' : `Stop ${routePoints.length}`}</div>
-                  <div class="text-sm text-gray-600">${lat.toFixed(4)}, ${lng.toFixed(4)}</div>
+                <div class="p-3 bg-gray-900 text-white rounded-lg shadow-lg border border-gray-600">
+                  <div class="font-semibold text-white">${routePoints.length === 0 ? 'Start Point' : `Waypoint ${routePoints.length}`}</div>
+                  <div class="text-sm text-gray-200">${lat.toFixed(4)}, ${lng.toFixed(4)}</div>
                 </div>
               `)
             )
@@ -683,9 +704,9 @@ const WeatherMap = () => {
   useEffect(() => {
     console.log('Hour changed to:', currentHour);
     if ((window as any).updateWeatherLayer && map.current && map.current.isStyleLoaded()) {
-      (window as any).updateWeatherLayer(currentHour);
+      (window as any).updateWeatherLayer(currentHour, showPrecipitation, showClouds);
     }
-  }, [currentHour]);
+  }, [currentHour, showPrecipitation, showClouds]);
 
   // Handle departure time changes - regenerate route with new weather
   useEffect(() => {
@@ -730,6 +751,10 @@ const WeatherMap = () => {
       const markers = document.querySelectorAll('.mapboxgl-marker:not([data-user-location="true"])');
       markers.forEach(marker => marker.remove());
       
+      // Clear route markers specifically
+      const routeMarkers = document.querySelectorAll('[data-route-marker="true"]');
+      routeMarkers.forEach(marker => marker.remove());
+      
       // Clear weather markers
       const weatherMarkers = document.querySelectorAll('[data-weather-marker="true"]');
       weatherMarkers.forEach(marker => marker.remove());
@@ -741,6 +766,41 @@ const WeatherMap = () => {
       }
     }
   };
+
+  // Update weather forecasts when route changes
+  useEffect(() => {
+    const updateForecasts = async () => {
+      if (routePoints.length >= 2) {
+        try {
+          // Get departure weather
+          const depWeather = await getTimeBasedWeather(
+            routePoints[0].lat, 
+            routePoints[0].lng, 
+            departureTime
+          );
+          setDepartureWeather(depWeather?.current);
+
+          // Calculate arrival time
+          if (currentRoute) {
+            const arrivalTime = new Date(departureTime.getTime() + currentRoute.duration * 1000);
+            const arrWeather = await getTimeBasedWeather(
+              routePoints[routePoints.length - 1].lat,
+              routePoints[routePoints.length - 1].lng,
+              arrivalTime
+            );
+            setArrivalWeather(arrWeather?.current);
+          }
+        } catch (error) {
+          console.error('Error updating weather forecasts:', error);
+        }
+      } else {
+        setDepartureWeather(null);
+        setArrivalWeather(null);
+      }
+    };
+
+    updateForecasts();
+  }, [routePoints, departureTime, currentRoute, getTimeBasedWeather]);
 
   console.log('Rendering main weather map interface...');
 
@@ -797,6 +857,12 @@ const WeatherMap = () => {
               departureTime={departureTime}
               onDepartureTimeChange={setDepartureTime}
             />
+            <OverlayControls
+              showPrecipitation={showPrecipitation}
+              showClouds={showClouds}
+              onTogglePrecipitation={setShowPrecipitation}
+              onToggleClouds={setShowClouds}
+            />
             <AddressSearch
               mapboxToken={mapboxToken}
               onLocationSelect={(lng: number, lat: number, placeName: string) => {
@@ -815,6 +881,19 @@ const WeatherMap = () => {
               <Button onClick={clearRoute} variant="outline" size="sm">
                 Clear Route
               </Button>
+            )}
+          </div>
+          
+          <div className="absolute top-4 left-4 z-10">
+            {(departureWeather || arrivalWeather) && (
+              <WeatherForecast
+                departureWeather={departureWeather}
+                arrivalWeather={arrivalWeather}
+                departureLocation="Departure"
+                arrivalLocation="Destination"
+                departureTime={departureTime}
+                arrivalTime={currentRoute ? new Date(departureTime.getTime() + currentRoute.duration * 1000) : undefined}
+              />
             )}
           </div>
           
