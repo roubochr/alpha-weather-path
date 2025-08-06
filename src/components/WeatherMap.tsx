@@ -1,23 +1,23 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 import { Card } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { CloudRain, MapPin, Route, AlertTriangle, Layers, Navigation } from 'lucide-react';
+import { CloudRain, MapPin, Route, AlertTriangle, Layers, Navigation, Key } from 'lucide-react';
 import { useWeatherAPI, WeatherData } from '@/hooks/useWeatherAPI';
 import { useMockWeather } from '@/hooks/useMockWeather';
+import { supabase } from '@/integrations/supabase/client';
 import { useRouting, RouteData } from '@/hooks/useRouting';
 import { useTimeBasedWeather } from '@/hooks/useTimeBasedWeather';
 import SecretForm from './SecretForm';
 import AddressSearch from './AddressSearch';
 import NavigationPanel from './NavigationPanel';
 import TimeControls from './TimeControls';
-import PrecipitationOverlay from './PrecipitationOverlay';
-
+import ApiKeySetup from './ApiKeySetup';
 
 interface RoutePoint {
   lng: number;
@@ -37,15 +37,6 @@ interface RouteSegment {
 const WeatherMap: React.FC = () => {
   console.log('WeatherMap component rendering...');
   
-  const handleTokenSubmit = (token: string) => {
-    if (token && !token.startsWith('http')) {
-      localStorage.setItem('mapbox-token', token);
-      setMapboxToken(token);
-      setShowTokenInput(false);
-    } else {
-      alert('Please enter a valid Mapbox token (not a URL)');
-    }
-  };
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const [mapboxToken, setMapboxToken] = useState(() => {
@@ -61,7 +52,7 @@ const WeatherMap: React.FC = () => {
   const [routeWeather, setRouteWeather] = useState<RoutePoint[]>([]);
   const [showWeatherLayer, setShowWeatherLayer] = useState(false);
   const [weatherMarkers, setWeatherMarkers] = useState<mapboxgl.Marker[]>([]);
-  const [hasWeatherAPI, setHasWeatherAPI] = useState(true); // Always enable weather features
+  const [hasWeatherAPI, setHasWeatherAPI] = useState(true);
   const [currentRoute, setCurrentRoute] = useState<RouteData | null>(null);
   const [isNavigating, setIsNavigating] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
@@ -70,10 +61,29 @@ const WeatherMap: React.FC = () => {
   const [isAnimating, setIsAnimating] = useState(false);
   const [departureTime, setDepartureTime] = useState(() => new Date());
   const [routeSegments, setRouteSegments] = useState<RouteSegment[]>([]);
+  const [showApiKeySetup, setShowApiKeySetup] = useState(false);
+  const [hasApiKey, setHasApiKey] = useState(false);
+
   const { getWeatherData, loading } = useWeatherAPI();
   const { getMockWeatherData } = useMockWeather();
   const { getRoute, loading: routeLoading } = useRouting(mapboxToken);
   const { getTimeBasedWeather, calculateArrivalWeather } = useTimeBasedWeather();
+
+  // Check for existing API key on mount
+  useEffect(() => {
+    const apiKey = localStorage.getItem('openweather-api-key');
+    setHasApiKey(!!apiKey);
+  }, []);
+
+  const handleTokenSubmit = (token: string) => {
+    if (token && !token.startsWith('http')) {
+      localStorage.setItem('mapbox-token', token);
+      setMapboxToken(token);
+      setShowTokenInput(false);
+    } else {
+      alert('Please enter a valid Mapbox token (not a URL)');
+    }
+  };
 
   // Enhanced GPS tracking for mobile devices
   useEffect(() => {
@@ -299,9 +309,33 @@ const WeatherMap: React.FC = () => {
     // Get weather data (real or mock)
     console.log('Fetching weather data for point...');
     const hasAPIKey = !!localStorage.getItem('openweather-api-key');
-    const weatherData = hasAPIKey 
-      ? await getWeatherData(roundedLat, roundedLng)
-      : await getMockWeatherData(roundedLat, roundedLng);
+    
+    let weatherData = null;
+    
+    if (hasAPIKey) {
+      // Try Supabase edge function first, then fall back to direct API
+      try {
+        const { data: supabaseData, error } = await supabase.functions.invoke('get-weather', {
+          body: { lat: roundedLat, lon: roundedLng }
+        });
+        
+        if (!error && supabaseData) {
+          weatherData = supabaseData;
+          console.log('Weather data from Supabase:', weatherData);
+        }
+      } catch (supabaseError) {
+        console.log('Supabase weather failed, trying direct API...');
+      }
+      
+      // Fallback to direct API call
+      if (!weatherData) {
+        weatherData = await getWeatherData(roundedLat, roundedLng);
+      }
+    } else {
+      // Use mock data if no API key
+      weatherData = await getMockWeatherData(roundedLat, roundedLng);
+    }
+    
     console.log('Weather data received:', weatherData);
     
     if (weatherData) {
@@ -336,7 +370,7 @@ const WeatherMap: React.FC = () => {
         marker.setPopup(popup);
       }
     }
-  }, [getWeatherData]);
+  }, [getWeatherData, getMockWeatherData]);
 
   const getRainColor = (rainIntensity: number): string => {
     if (rainIntensity > 70) return '#dc2626'; // Red for heavy rain
@@ -625,16 +659,27 @@ const WeatherMap: React.FC = () => {
             <h1 className="text-xl font-bold">Weather Route Planner</h1>
           </div>
           <div className="flex items-center space-x-4">
-            <div className="flex items-center space-x-2">
-              <Switch
-                id="weather-layer"
-                checked={showWeatherLayer}
-                onCheckedChange={setShowWeatherLayer}
-              />
-              <Label htmlFor="weather-layer" className="flex items-center space-x-1">
-                <Layers className="h-4 w-4" />
-                <span>Weather</span>
-              </Label>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <Switch
+                  id="weather-layer"
+                  checked={showWeatherLayer}
+                  onCheckedChange={setShowWeatherLayer}
+                />
+                <Label htmlFor="weather-layer" className="flex items-center space-x-1">
+                  <Layers className="h-4 w-4" />
+                  <span>Weather</span>
+                </Label>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowApiKeySetup(true)}
+                className="ml-2"
+              >
+                <Key className="h-4 w-4 mr-1" />
+                {hasApiKey ? 'Update' : 'Add'} API Key
+              </Button>
             </div>
             <div className="flex space-x-2">
               {route.length >= 2 && (
@@ -771,6 +816,15 @@ const WeatherMap: React.FC = () => {
           </div>
         )}
       </div>
+      
+      {showApiKeySetup && (
+        <ApiKeySetup 
+          onApiKeySet={() => {
+            setShowApiKeySetup(false);
+            setHasApiKey(true);
+          }} 
+        />
+      )}
     </div>
   );
 };
