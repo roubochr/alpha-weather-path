@@ -10,7 +10,6 @@ import { Label } from '@/components/ui/label';
 import { CloudRain, MapPin, Route, AlertTriangle, Layers, Navigation, Key } from 'lucide-react';
 import { useWeatherAPI, WeatherData } from '@/hooks/useWeatherAPI';
 import { useMockWeather } from '@/hooks/useMockWeather';
-import { supabase } from '@/integrations/supabase/client';
 import { useRouting, RouteData } from '@/hooks/useRouting';
 import { useTimeBasedWeather } from '@/hooks/useTimeBasedWeather';
 import SecretForm from './SecretForm';
@@ -69,9 +68,16 @@ const WeatherMap: React.FC = () => {
   const { getRoute, loading: routeLoading } = useRouting(mapboxToken);
   const { getTimeBasedWeather, calculateArrivalWeather } = useTimeBasedWeather();
 
-  // Check for existing API key on mount
+  // Check for existing API key on mount and set the provided key
   useEffect(() => {
-    const apiKey = localStorage.getItem('openweather-api-key');
+    let apiKey = localStorage.getItem('openweather-api-key');
+    
+    // Set the provided API key if none exists
+    if (!apiKey) {
+      apiKey = 'ba3708802ed7275ee958045d0a9a0f99';
+      localStorage.setItem('openweather-api-key', apiKey);
+    }
+    
     setHasApiKey(!!apiKey);
   }, []);
 
@@ -306,31 +312,16 @@ const WeatherMap: React.FC = () => {
     const newPoint: RoutePoint = { lng: roundedLng, lat: roundedLat, marker };
     setRoute(prev => [...prev, newPoint]);
 
-    // Get weather data (real or mock)
+    // Get weather data using direct API call
     console.log('Fetching weather data for point...');
     const hasAPIKey = !!localStorage.getItem('openweather-api-key');
     
     let weatherData = null;
     
     if (hasAPIKey) {
-      // Try Supabase edge function first, then fall back to direct API
-      try {
-        const { data: supabaseData, error } = await supabase.functions.invoke('get-weather', {
-          body: { lat: roundedLat, lon: roundedLng }
-        });
-        
-        if (!error && supabaseData) {
-          weatherData = supabaseData;
-          console.log('Weather data from Supabase:', weatherData);
-        }
-      } catch (supabaseError) {
-        console.log('Supabase weather failed, trying direct API...');
-      }
-      
-      // Fallback to direct API call
-      if (!weatherData) {
-        weatherData = await getWeatherData(roundedLat, roundedLng);
-      }
+      // Use direct API call
+      weatherData = await getWeatherData(roundedLat, roundedLng);
+      console.log('Weather data from direct API:', weatherData);
     } else {
       // Use mock data if no API key
       weatherData = await getMockWeatherData(roundedLat, roundedLng);
