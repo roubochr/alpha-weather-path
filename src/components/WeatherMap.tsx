@@ -16,6 +16,8 @@ import OverlayControls from '@/components/OverlayControls';
 import WeatherForecast from '@/components/WeatherForecast';
 import LocationDialog from '@/components/LocationDialog';
 import MinimizableUI from '@/components/MinimizableUI';
+import TravelRecommendations from '@/components/TravelRecommendations';
+import { useTravelRecommendations, TravelRecommendation } from '@/hooks/useTravelRecommendations';
 
 // Define types for our route and weather system
 interface RoutePoint {
@@ -76,6 +78,10 @@ const WeatherMap = () => {
   const [departureWeather, setDepartureWeather] = useState<any>(null);
   const [arrivalWeather, setArrivalWeather] = useState<any>(null);
   
+  // Travel recommendations state
+  const [travelRecommendation, setTravelRecommendation] = useState<TravelRecommendation | null>(null);
+  const [routeHourlyForecasts, setRouteHourlyForecasts] = useState<{ [coordinate: string]: { [hour: number]: any } }>({});
+  
   // Route weather analysis
   const [routeWeather, setRouteWeather] = useState<Array<{
     lat: number;
@@ -88,6 +94,7 @@ const WeatherMap = () => {
   const { toast } = useToast();
   const { getRoute, loading: routeLoading, error: routeError } = useRouting(mapboxToken);
   const { getTimeBasedWeather } = useTimeBasedWeather();
+  const { generateRecommendation, loading: recommendationLoading } = useTravelRecommendations();
 
   // Auto-hide route info after 5 seconds when points are added
   useEffect(() => {
@@ -795,7 +802,7 @@ const WeatherMap = () => {
     }
   };
 
-  // Update weather forecasts when route changes
+  // Update weather forecasts and travel recommendations when route changes
   useEffect(() => {
     const updateForecasts = async () => {
       if (routePoints.length >= 2) {
@@ -817,6 +824,39 @@ const WeatherMap = () => {
               arrivalTime
             );
             setArrivalWeather(arrWeather?.current);
+            
+            // Fetch hourly forecasts for route points for travel recommendations
+            const forecasts: { [coordinate: string]: { [hour: number]: any } } = {};
+            const samplePoints = Math.min(currentRoute.geometry.coordinates.length, 10);
+            const step = Math.max(1, Math.floor(currentRoute.geometry.coordinates.length / samplePoints));
+            
+            for (let i = 0; i < currentRoute.geometry.coordinates.length; i += step) {
+              const [lon, lat] = currentRoute.geometry.coordinates[i];
+              const coordKey = `${Math.round(lon * 1000) / 1000},${Math.round(lat * 1000) / 1000}`;
+              
+              try {
+                const weather = await getTimeBasedWeather(lat, lon, departureTime);
+                if (weather?.hourlyForecast) {
+                  forecasts[coordKey] = weather.hourlyForecast;
+                }
+              } catch (error) {
+                console.warn(`Failed to get weather for coordinate ${coordKey}:`, error);
+              }
+            }
+            
+            setRouteHourlyForecasts(forecasts);
+            
+            // Generate travel recommendations
+            try {
+              const recommendation = await generateRecommendation(
+                currentRoute.geometry.coordinates,
+                currentRoute.duration,
+                forecasts
+              );
+              setTravelRecommendation(recommendation);
+            } catch (error) {
+              console.error('Error generating travel recommendations:', error);
+            }
           }
         } catch (error) {
           console.error('Error updating weather forecasts:', error);
@@ -824,11 +864,13 @@ const WeatherMap = () => {
       } else {
         setDepartureWeather(null);
         setArrivalWeather(null);
+        setTravelRecommendation(null);
+        setRouteHourlyForecasts({});
       }
     };
 
     updateForecasts();
-  }, [routePoints, departureTime, currentRoute, getTimeBasedWeather]);
+  }, [routePoints, departureTime, currentRoute, getTimeBasedWeather, generateRecommendation]);
 
   console.log('Rendering main weather map interface...');
 
@@ -1092,6 +1134,23 @@ const WeatherMap = () => {
             onClearRoute={clearRoute}
             routePoints={routePoints}
           />
+          
+          {/* Travel Recommendations Panel */}
+          {routePoints.length >= 2 && currentRoute && (
+            <div className="absolute top-4 right-4 z-10 w-80 max-h-[calc(100vh-2rem)] overflow-y-auto">
+              <TravelRecommendations
+                recommendation={travelRecommendation}
+                loading={recommendationLoading}
+                onSelectDeparture={(time: Date) => {
+                  setDepartureTime(time);
+                  toast({
+                    title: "Departure Time Updated",
+                    description: `New departure: ${time.toLocaleTimeString()}`,
+                  });
+                }}
+              />
+            </div>
+          )}
           
           <div className="absolute bottom-4 right-4 z-10">
             <WeatherLegend />
