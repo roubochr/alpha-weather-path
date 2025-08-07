@@ -31,22 +31,24 @@ const AccuWeatherSetup: React.FC<AccuWeatherSetupProps> = ({ onApiKeySet }) => {
     setError(null);
     
     try {
-      // Test with a basic location lookup for New York
-      const response = await fetch(
-        `https://dataservice.accuweather.com/locations/v1/cities/geoposition/search?apikey=${key}&q=40.7128,-74.0060`
-      );
+      const response = await fetch('/functions/v1/validate-accuweather', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ apiKey: key }),
+      });
       
-      if (response.ok) {
+      const data = await response.json();
+      
+      if (data.valid) {
         return true;
-      } else if (response.status === 401) {
-        setError('Invalid API key');
-        return false;
       } else {
-        setError('API key validation failed');
+        setError(data.error || 'API key validation failed');
         return false;
       }
     } catch (err) {
-      setError('Failed to validate API key');
+      setError('Failed to validate API key - please check your connection');
       return false;
     } finally {
       setIsValidating(false);
