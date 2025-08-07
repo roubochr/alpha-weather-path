@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, Menu, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Menu, X, Zap, Settings } from 'lucide-react';
 import TimeControls from './TimeControls';
 import OverlayControls from './OverlayControls';
 import AddressSearch from './AddressSearch';
 import WeatherForecast from './WeatherForecast';
+import AccuWeatherSetup from './AccuWeatherSetup';
 
 interface MinimizableUIProps {
   currentHour: number;
@@ -25,6 +26,8 @@ interface MinimizableUIProps {
   arrivalTime?: Date;
   onClearRoute: () => void;
   routePoints: any[];
+  onApiSetup: () => void;
+  onAccuWeatherSetup: () => void;
 }
 
 const MinimizableUI: React.FC<MinimizableUIProps> = ({
@@ -45,10 +48,12 @@ const MinimizableUI: React.FC<MinimizableUIProps> = ({
   arrivalWeather,
   arrivalTime,
   onClearRoute,
-  routePoints
+  routePoints,
+  onApiSetup,
+  onAccuWeatherSetup
 }) => {
   const [isMinimized, setIsMinimized] = useState(false);
-  const [activeTab, setActiveTab] = useState<'controls' | 'search' | 'weather'>('controls');
+  const [activeTab, setActiveTab] = useState<'controls' | 'search' | 'weather' | 'settings'>('controls');
 
   const handleDepartureTimePlus = (hours: number) => {
     const newTime = new Date(departureTime.getTime() + hours * 60 * 60 * 1000);
@@ -99,6 +104,14 @@ const MinimizableUI: React.FC<MinimizableUIProps> = ({
               className="h-8 text-xs"
             >
               Weather
+            </Button>
+            <Button
+              size="sm"
+              variant={activeTab === 'settings' ? 'default' : 'ghost'}
+              onClick={() => setActiveTab('settings')}
+              className="h-8 text-xs"
+            >
+              Setup
             </Button>
           </div>
           <Button
@@ -218,6 +231,38 @@ const MinimizableUI: React.FC<MinimizableUIProps> = ({
                   </div>
                 </div>
               )}
+            </div>
+          )}
+
+          {activeTab === 'settings' && (
+            <div className="space-y-4">
+              <div className="space-y-3">
+                <Button 
+                  variant="outline" 
+                  onClick={onAccuWeatherSetup}
+                  className="w-full justify-start"
+                >
+                  <Zap className="w-4 h-4 mr-2" />
+                  AccuWeather MinuteCast
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={onApiSetup}
+                  className="w-full justify-start"
+                >
+                  <Settings className="w-4 h-4 mr-2" />
+                  OpenWeather API
+                </Button>
+              </div>
+              
+              <div className="text-xs text-muted-foreground bg-muted/30 rounded p-3">
+                <div className="font-medium mb-2">API Setup:</div>
+                <div className="space-y-1">
+                  <div>• <strong>AccuWeather:</strong> Minute-by-minute precipitation for trips under 2 hours</div>
+                  <div>• <strong>OpenWeather:</strong> 5-day weather forecasts for longer trips</div>
+                  <div>• Both APIs are free with registration</div>
+                </div>
+              </div>
             </div>
           )}
         </div>

@@ -16,8 +16,11 @@ import OverlayControls from '@/components/OverlayControls';
 import WeatherForecast from '@/components/WeatherForecast';
 import LocationDialog from '@/components/LocationDialog';
 import MinimizableUI from '@/components/MinimizableUI';
+import AccuWeatherSetup from '@/components/AccuWeatherSetup';
 import TravelRecommendations from '@/components/TravelRecommendations';
 import { useTravelRecommendations, TravelRecommendation } from '@/hooks/useTravelRecommendations';
+import { Toaster } from '@/components/ui/toaster';
+import { toast } from '@/hooks/use-toast';
 
 // Define types for our route and weather system
 interface RoutePoint {
@@ -90,6 +93,7 @@ const WeatherMap = () => {
     rainProbability?: number;
   }>>([]);
   const [showApiKeySetup, setShowApiKeySetup] = useState(false);
+  const [showAccuWeatherSetup, setShowAccuWeatherSetup] = useState(false);
 
   const { toast } = useToast();
   const { getRoute, loading: routeLoading, error: routeError } = useRouting(mapboxToken);
@@ -1122,6 +1126,19 @@ const WeatherMap = () => {
       
       {hasWeatherAPI && (
         <>
+          {/* API Setup Dialogs */}
+          {showApiKeySetup && (
+            <div className="absolute top-6 right-6 z-20 w-96">
+              <ApiKeySetup onApiKeySet={() => setShowApiKeySetup(false)} />
+            </div>
+          )}
+          
+          {showAccuWeatherSetup && (
+            <div className="absolute top-6 right-6 z-20 w-96">
+              <AccuWeatherSetup onApiKeySet={() => setShowAccuWeatherSetup(false)} />
+            </div>
+          )}
+
           {/* Minimizable UI for mobile */}
           <MinimizableUI
             currentHour={currentHour}
@@ -1153,6 +1170,8 @@ const WeatherMap = () => {
             arrivalTime={currentRoute ? new Date(departureTime.getTime() + currentRoute.duration * 1000) : undefined}
             onClearRoute={clearRoute}
             routePoints={routePoints}
+            onApiSetup={() => setShowApiKeySetup(true)}
+            onAccuWeatherSetup={() => setShowAccuWeatherSetup(true)}
           />
           
           {/* Travel Recommendations Panel */}
