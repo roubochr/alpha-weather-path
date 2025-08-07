@@ -1171,7 +1171,6 @@ const WeatherMap = () => {
             onClearRoute={clearRoute}
             routePoints={routePoints}
             onApiSetup={() => setShowApiKeySetup(true)}
-            onAccuWeatherSetup={() => setShowAccuWeatherSetup(true)}
           />
           
           {/* Travel Recommendations Panel */}

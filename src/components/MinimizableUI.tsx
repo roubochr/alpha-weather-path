@@ -1,11 +1,10 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, Menu, X, Zap, Settings } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Menu, X, Zap, Settings, Check } from 'lucide-react';
 import TimeControls from './TimeControls';
 import OverlayControls from './OverlayControls';
 import AddressSearch from './AddressSearch';
 import WeatherForecast from './WeatherForecast';
-import AccuWeatherSetup from './AccuWeatherSetup';
 
 interface MinimizableUIProps {
   currentHour: number;
@@ -27,7 +26,6 @@ interface MinimizableUIProps {
   onClearRoute: () => void;
   routePoints: any[];
   onApiSetup: () => void;
-  onAccuWeatherSetup: () => void;
 }
 
 const MinimizableUI: React.FC<MinimizableUIProps> = ({
@@ -49,8 +47,7 @@ const MinimizableUI: React.FC<MinimizableUIProps> = ({
   arrivalTime,
   onClearRoute,
   routePoints,
-  onApiSetup,
-  onAccuWeatherSetup
+  onApiSetup
 }) => {
   const [isMinimized, setIsMinimized] = useState(false);
   const [activeTab, setActiveTab] = useState<'controls' | 'search' | 'weather' | 'settings'>('controls');
@@ -237,14 +234,15 @@ const MinimizableUI: React.FC<MinimizableUIProps> = ({
           {activeTab === 'settings' && (
             <div className="space-y-4">
               <div className="space-y-3">
-                <Button 
-                  variant="outline" 
-                  onClick={onAccuWeatherSetup}
-                  className="w-full justify-start"
-                >
-                  <Zap className="w-4 h-4 mr-2" />
-                  AccuWeather MinuteCast
-                </Button>
+                <div className="w-full justify-start p-3 bg-muted/50 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-green-500" />
+                    <div>
+                      <div className="text-sm font-medium">AccuWeather MinuteCast</div>
+                      <div className="text-xs text-muted-foreground">Enabled for sub-2-hour trips</div>
+                    </div>
+                  </div>
+                </div>
                 <Button 
                   variant="outline" 
                   onClick={onApiSetup}
