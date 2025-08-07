@@ -787,7 +787,8 @@ const WeatherMap = () => {
         font-size: 16px;
         font-weight: bold;
         color: white;
-        z-index: 1000;
+        z-index: 10000 !important;
+        position: relative;
       `;
       markerElement.innerHTML = '🚀';
       markerElement.setAttribute('data-route-marker', 'true');
@@ -834,7 +835,8 @@ const WeatherMap = () => {
         font-size: 16px;
         font-weight: bold;
         color: white;
-        z-index: 1000;
+        z-index: 10000 !important;
+        position: relative;
       `;
       markerElement.innerHTML = '🏁';
       markerElement.setAttribute('data-route-marker', 'true');
@@ -878,7 +880,8 @@ const WeatherMap = () => {
         font-size: 16px;
         font-weight: bold;
         color: white;
-        z-index: 1000;
+        z-index: 10000 !important;
+        position: relative;
       `;
       markerElement.innerHTML = routePoints.length.toString();
       markerElement.setAttribute('data-route-marker', 'true');
