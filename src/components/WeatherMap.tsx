@@ -723,7 +723,7 @@ const WeatherMap = () => {
         map.current.remove();
       }
     };
-  }, [mapboxToken, currentLocation, addWeatherLayer, routePoints, generateRoute]);
+  }, [mapboxToken]); // Only reinitialize map when token changes
 
   // Handle hour changes for time slider - don't move map
   useEffect(() => {
