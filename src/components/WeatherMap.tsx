@@ -347,6 +347,10 @@ const WeatherMap = () => {
     map.current.on('click', 'route-line', (e) => {
       if (!e.features || e.features.length === 0) return;
       
+      // Prevent the general map click handler from triggering
+      e.preventDefault();
+      e.originalEvent?.stopPropagation();
+      
       const feature = e.features[0];
       const precipitation = feature.properties?.precipitation || 0;
       const temperature = feature.properties?.temperature || 0;
@@ -354,13 +358,24 @@ const WeatherMap = () => {
       const arrivalTime = feature.properties?.arrivalTime || '';
       const color = getPrecipitationColor(precipitation);
       
-      new mapboxgl.Popup()
+      // Remove any existing route popup
+      if ((window as any).routePopup) {
+        (window as any).routePopup.remove();
+      }
+      
+      // Create persistent popup that stays until map movement or click elsewhere
+      const popup = new mapboxgl.Popup({
+        closeButton: true,
+        closeOnClick: false,
+        closeOnMove: true,
+        offset: [0, -10]
+      })
         .setLngLat(e.lngLat)
         .setHTML(`
-          <div class="p-3 min-w-48">
-            <div class="font-semibold text-lg">${Math.round(temperature)}°C</div>
-            <div class="text-sm font-medium">${condition}</div>
-            <div class="text-xs mt-2 space-y-1">
+          <div class="p-3 min-w-48 bg-background border border-border rounded-lg">
+            <div class="font-semibold text-lg text-foreground">${Math.round(temperature)}°C</div>
+            <div class="text-sm font-medium text-muted-foreground">${condition}</div>
+            <div class="text-xs mt-2 space-y-1 text-foreground">
               <div>💧 Precipitation: ${precipitation}mm/h</div>
               <div>🕐 Arrival: ${arrivalTime}</div>
               <div class="flex items-center mt-2">
@@ -371,6 +386,9 @@ const WeatherMap = () => {
           </div>
         `)
         .addTo(map.current!);
+        
+      // Store popup for cleanup
+      (window as any).routePopup = popup;
     });
 
     // Add weather markers at key points
@@ -620,11 +638,25 @@ const WeatherMap = () => {
 
       // Add click handler for location selection dialog
       map.current.on('click', (e) => {
-        const { lng, lat } = e.lngLat;
-        console.log('Map clicked at:', { lng, lat });
+        // Check if click was on a route line by querying features at the point
+        const features = map.current?.queryRenderedFeatures(e.point, {
+          layers: ['route-line']
+        });
         
-        setClickedLocation({ lng, lat });
-        setShowLocationDialog(true);
+        // Only show location dialog if not clicking on route line
+        if (!features || features.length === 0) {
+          const { lng, lat } = e.lngLat;
+          console.log('Map clicked at:', { lng, lat });
+          
+          // Close any existing route popup when clicking elsewhere
+          if ((window as any).routePopup) {
+            (window as any).routePopup.remove();
+            (window as any).routePopup = null;
+          }
+          
+          setClickedLocation({ lng, lat });
+          setShowLocationDialog(true);
+        }
       });
 
     } catch (error) {
