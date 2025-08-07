@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -6,45 +6,10 @@ import { CloudRain, Droplets, Cloud, ChevronUp, ChevronDown } from 'lucide-react
 
 interface WeatherLegendProps {
   className?: string;
-  routePointsCount?: number;
 }
 
-const WeatherLegend: React.FC<WeatherLegendProps> = ({ className = '', routePointsCount = 0 }) => {
+const WeatherLegend: React.FC<WeatherLegendProps> = ({ className = '' }) => {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [autoHideTimer, setAutoHideTimer] = useState<NodeJS.Timeout | null>(null);
-
-  // Auto-hide after 5 seconds when points are added
-  useEffect(() => {
-    if (routePointsCount > 0 && isExpanded) {
-      // Clear existing timer
-      if (autoHideTimer) {
-        clearTimeout(autoHideTimer);
-      }
-      
-      // Set new timer for 5 seconds
-      const timer = setTimeout(() => {
-        setIsExpanded(false);
-      }, 5000);
-      
-      setAutoHideTimer(timer);
-    }
-    
-    // Cleanup timer on unmount
-    return () => {
-      if (autoHideTimer) {
-        clearTimeout(autoHideTimer);
-      }
-    };
-  }, [routePointsCount, isExpanded]);
-
-  const handleToggle = () => {
-    // Clear auto-hide timer when manually toggling
-    if (autoHideTimer) {
-      clearTimeout(autoHideTimer);
-      setAutoHideTimer(null);
-    }
-    setIsExpanded(!isExpanded);
-  };
   
   const legendItems = [
     { color: '#22c55e', label: 'No Rain', range: '0 mm/h' },
@@ -68,7 +33,7 @@ const WeatherLegend: React.FC<WeatherLegendProps> = ({ className = '', routePoin
           variant="ghost"
           size="sm"
           className="h-6 w-6 p-0 hover:bg-white/10"
-          onClick={handleToggle}
+          onClick={() => setIsExpanded(!isExpanded)}
         >
           {isExpanded ? 
             <ChevronDown className="h-3 w-3 text-white" /> : 

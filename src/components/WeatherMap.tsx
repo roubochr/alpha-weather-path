@@ -65,6 +65,8 @@ const WeatherMap = () => {
   const [isUIMinimized, setIsUIMinimized] = useState(false);
   const [clickedLocation, setClickedLocation] = useState<{lng: number, lat: number} | null>(null);
   const [showLocationDialog, setShowLocationDialog] = useState(false);
+  const [showRouteInfo, setShowRouteInfo] = useState(true);
+  const [routeInfoTimer, setRouteInfoTimer] = useState<NodeJS.Timeout | null>(null);
   
   // Overlay control state
   const [showPrecipitation, setShowPrecipitation] = useState(true);
@@ -86,6 +88,43 @@ const WeatherMap = () => {
   const { toast } = useToast();
   const { getRoute, loading: routeLoading, error: routeError } = useRouting(mapboxToken);
   const { getTimeBasedWeather } = useTimeBasedWeather();
+
+  // Auto-hide route info after 5 seconds when points are added
+  useEffect(() => {
+    if (routePoints.length > 0) {
+      setShowRouteInfo(true);
+      
+      // Clear existing timer
+      if (routeInfoTimer) {
+        clearTimeout(routeInfoTimer);
+      }
+      
+      // Set new timer for 5 seconds
+      const timer = setTimeout(() => {
+        setShowRouteInfo(false);
+      }, 5000);
+      
+      setRouteInfoTimer(timer);
+    }
+    
+    // Cleanup timer on unmount
+    return () => {
+      if (routeInfoTimer) {
+        clearTimeout(routeInfoTimer);
+      }
+    };
+  }, [routePoints.length]);
+
+  // Show route info when points are cleared
+  useEffect(() => {
+    if (routePoints.length === 0) {
+      setShowRouteInfo(false);
+      if (routeInfoTimer) {
+        clearTimeout(routeInfoTimer);
+        setRouteInfoTimer(null);
+      }
+    }
+  }, [routePoints.length]);
 
   console.log('Rendering state:', {
     hasWeatherAPI,
@@ -1059,13 +1098,13 @@ const WeatherMap = () => {
           />
           
           <div className="absolute bottom-4 right-4 z-10">
-            <WeatherLegend routePointsCount={routePoints.length} />
+            <WeatherLegend />
           </div>
         </>
       )}
       
-      {routePoints.length > 0 && (
-        <div className="absolute bottom-4 left-4 z-10 bg-card/95 backdrop-blur-sm border rounded-lg p-3 shadow-lg">
+      {routePoints.length > 0 && showRouteInfo && (
+        <div className="absolute bottom-4 left-4 z-10 bg-card/95 backdrop-blur-sm border rounded-lg p-3 shadow-lg transition-all duration-300">
           <div className="text-sm font-medium mb-1">
             Route: {routePoints.length} point{routePoints.length !== 1 ? 's' : ''}
           </div>
