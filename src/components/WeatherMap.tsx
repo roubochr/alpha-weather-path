@@ -112,7 +112,9 @@ const WeatherMap = () => {
   const setupUserLocation = useCallback(() => {
     if (!navigator.geolocation) {
       console.log('Geolocation not supported, using fallback location');
-      setCurrentLocation([-74.006, 40.7128]); // New York fallback
+      if (!currentLocation) {
+        setCurrentLocation([-74.006, 40.7128]); // New York fallback
+      }
       return;
     }
 
@@ -130,17 +132,19 @@ const WeatherMap = () => {
         ];
         console.log('User location obtained:', userLoc);
         setUserLocation(userLoc);
-        if (!currentLocation) {
+        if (!currentLocation && !preserveMapPosition) {
           setCurrentLocation(userLoc);
         }
       },
       (error) => {
         console.log('Geolocation error:', error);
-        setCurrentLocation([-74.006, 40.7128]); // New York fallback
+        if (!currentLocation) {
+          setCurrentLocation([-74.006, 40.7128]); // New York fallback
+        }
       },
       options
     );
-  }, [currentLocation]);
+  }, [currentLocation, preserveMapPosition]);
 
   const visualizeWeatherRoute = useCallback(async (routeData: RouteData, departureTime: Date) => {
     if (!map.current) return;
@@ -406,27 +410,34 @@ const WeatherMap = () => {
         background-color: ${getPrecipitationColor(segment.weather.precipitation)};
         box-shadow: 0 2px 4px rgba(0,0,0,0.3);
         cursor: pointer;
+        z-index: 1000;
+        position: relative;
       `;
 
       // Only add marker if map is ready
       if (map.current && map.current.isStyleLoaded()) {
-        new mapboxgl.Marker(markerElement)
+        const marker = new mapboxgl.Marker(markerElement)
           .setLngLat(segment.coordinate)
-        .setPopup(
-          new mapboxgl.Popup({ offset: 25, closeButton: false }).setHTML(`
-            <div class="p-3 bg-gray-900 text-white rounded-lg shadow-lg border border-gray-600 min-w-48">
-              <div class="font-bold text-xl text-white">${Math.round(segment.weather.temperature)}°C</div>
-              <div class="font-semibold text-blue-200 mb-2">${segment.weather.condition}</div>
-              <div class="text-sm text-gray-200 space-y-1">
-                <div>💧 Precipitation: ${segment.weather.precipitation.toFixed(1)}mm/h</div>
-                <div>💨 Wind: ${Math.round(segment.weather.windSpeed)}km/h</div>
-                <div>👁️ Visibility: ${Math.round(segment.weather.visibility/1000)}km</div>
-                <div>🕐 Arrival: ${segment.arrivalTime.toLocaleTimeString()}</div>
+          .setPopup(
+            new mapboxgl.Popup({ offset: 25, closeButton: false }).setHTML(`
+              <div class="p-3 bg-gray-900 text-white rounded-lg shadow-lg border border-gray-600 min-w-48">
+                <div class="font-bold text-xl text-white">${Math.round(segment.weather.temperature)}°C</div>
+                <div class="font-semibold text-blue-200 mb-2">${segment.weather.condition}</div>
+                <div class="text-sm text-gray-200 space-y-1">
+                  <div>💧 Precipitation: ${segment.weather.precipitation.toFixed(1)}mm/h</div>
+                  <div>💨 Wind: ${Math.round(segment.weather.windSpeed)}km/h</div>
+                  <div>👁️ Visibility: ${Math.round(segment.weather.visibility/1000)}km</div>
+                  <div>🕐 Arrival: ${segment.arrivalTime.toLocaleTimeString()}</div>
+                </div>
               </div>
-            </div>
-          `)
-        )
-          .addTo(map.current!);
+            `)
+          );
+        
+        // Set high z-index for marker visibility
+        const markerEl = marker.getElement();
+        markerEl.style.zIndex = '1000';
+        
+        marker.addTo(map.current!);
       }
     });
   }, [getTimeBasedWeather, getPrecipitationColor]);
@@ -633,6 +644,8 @@ const WeatherMap = () => {
           const zoom = map.current.getZoom();
           setMapCenter([center.lng, center.lat]);
           setMapZoom(zoom);
+          // Set preserve position flag after first movement
+          setPreserveMapPosition(true);
         }
       });
 
@@ -1046,7 +1059,7 @@ const WeatherMap = () => {
           />
           
           <div className="absolute bottom-4 right-4 z-10">
-            <WeatherLegend />
+            <WeatherLegend routePointsCount={routePoints.length} />
           </div>
         </>
       )}
