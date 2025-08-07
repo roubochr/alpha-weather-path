@@ -117,11 +117,12 @@ const PrecipitationOverlay: React.FC<PrecipitationOverlayProps> = ({
             type: 'raster',
             source: 'precipitation',
             paint: {
-              'raster-opacity': 0.7,
+              'raster-opacity': 0.85,
               'raster-fade-duration': 300,
-              'raster-brightness-min': 0.1,
-              'raster-brightness-max': 1.0,
-              'raster-contrast': 0.3
+              'raster-brightness-min': 0.0,
+              'raster-brightness-max': 1.2,
+              'raster-contrast': 0.4,
+              'raster-saturation': 0.3
             }
           });
         }

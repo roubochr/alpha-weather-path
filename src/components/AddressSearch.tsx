@@ -16,12 +16,16 @@ interface AddressSearchProps {
   onLocationSelect: (lng: number, lat: number, placeName: string) => void;
   onStartNavigation: () => void;
   mapboxToken: string;
+  onSetDeparture?: (lng: number, lat: number, placeName: string) => void;
+  onSetDestination?: (lng: number, lat: number, placeName: string) => void;
 }
 
 const AddressSearch: React.FC<AddressSearchProps> = ({ 
   onLocationSelect, 
   onStartNavigation,
-  mapboxToken 
+  mapboxToken,
+  onSetDeparture,
+  onSetDestination
 }) => {
   console.log('AddressSearch rendering with mapboxToken:', mapboxToken ? 'present' : 'missing');
   const [query, setQuery] = useState('');
@@ -112,17 +116,49 @@ const AddressSearch: React.FC<AddressSearchProps> = ({
       </form>
 
       {showResults && results.length > 0 && (
-        <Card className="absolute top-full left-0 right-0 mt-2 z-50 max-h-60 overflow-y-auto">
+        <Card className="absolute top-full left-0 right-0 mt-2 z-50 max-h-80 overflow-y-auto">
           <div className="p-2">
             {results.map((result, index) => (
-              <div
-                key={index}
-                className="flex items-center space-x-2 p-2 hover:bg-muted rounded cursor-pointer"
-                onClick={() => handleLocationSelect(result)}
-              >
-                <MapPin className="h-4 w-4 text-primary flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{result.place_name}</p>
+              <div key={index} className="border-b border-border last:border-b-0">
+                <div className="flex items-center space-x-2 p-2 hover:bg-muted rounded">
+                  <MapPin className="h-4 w-4 text-primary flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{result.place_name}</p>
+                  </div>
+                </div>
+                <div className="flex gap-2 px-2 pb-2">
+                  {onSetDeparture && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const [lng, lat] = result.center;
+                        onSetDeparture(lng, lat, result.place_name);
+                        setQuery(result.place_name);
+                        setShowResults(false);
+                      }}
+                      className="h-8 text-xs flex-1"
+                    >
+                      <div className="w-3 h-3 bg-emerald-500 rounded-full mr-1"></div>
+                      Set as Departure
+                    </Button>
+                  )}
+                  {onSetDestination && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const [lng, lat] = result.center;
+                        onSetDestination(lng, lat, result.place_name);
+                        setQuery(result.place_name);
+                        setShowResults(false);
+                      }}
+                      className="h-8 text-xs flex-1"
+                    >
+                      <div className="w-3 h-3 bg-red-500 rounded-full mr-1"></div>
+                      Set as Destination
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}

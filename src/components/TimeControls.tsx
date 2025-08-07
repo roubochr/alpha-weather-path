@@ -89,12 +89,12 @@ const TimeControls: React.FC<TimeControlsProps> = ({
         </div>
 
         <div className="border-t border-border pt-3">
-          <Label className="text-sm font-medium">Departure Time</Label>
+          <Label className="text-sm font-medium">Departure Time & Date</Label>
           <div className="text-xs text-muted-foreground mb-2">
             Current: {formatDateTime(departureTime)}
           </div>
           
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-2 mb-2">
             <Button
               size="sm"
               variant="outline"
@@ -118,6 +118,26 @@ const TimeControls: React.FC<TimeControlsProps> = ({
               className="text-xs"
             >
               +3hr
+            </Button>
+          </div>
+          
+          {/* Date controls */}
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleDepartureTimeChange(24)}
+              className="text-xs"
+            >
+              Tomorrow
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleDepartureTimeChange(168)}
+              className="text-xs"
+            >
+              Next Week
             </Button>
           </div>
         </div>

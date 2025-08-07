@@ -14,6 +14,8 @@ import TimeControls from '@/components/TimeControls';
 import WeatherLegend from '@/components/WeatherLegend';
 import OverlayControls from '@/components/OverlayControls';
 import WeatherForecast from '@/components/WeatherForecast';
+import LocationDialog from '@/components/LocationDialog';
+import MinimizableUI from '@/components/MinimizableUI';
 
 // Define types for our route and weather system
 interface RoutePoint {
@@ -42,8 +44,9 @@ const WeatherMap = () => {
   const [mapboxToken, setMapboxToken] = useState<string>('');
   const [showTokenInput, setShowTokenInput] = useState(false);
   const [hasWeatherAPI, setHasApiKey] = useState(false);
-  const [currentLocation, setCurrentLocation] = useState<[number, number]>([-74.006, 40.7128]);
+  const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
+  const [preserveMapPosition, setPreserveMapPosition] = useState(false);
   
   // Route and navigation state
   const [routePoints, setRoutePoints] = useState<RoutePoint[]>([]);
@@ -55,6 +58,11 @@ const WeatherMap = () => {
   const [currentHour, setCurrentHour] = useState(new Date().getHours());
   const [isAnimating, setIsAnimating] = useState(false);
   const [departureTime, setDepartureTime] = useState(new Date());
+  
+  // UI state
+  const [isUIMinimized, setIsUIMinimized] = useState(false);
+  const [clickedLocation, setClickedLocation] = useState<{lng: number, lat: number} | null>(null);
+  const [showLocationDialog, setShowLocationDialog] = useState(false);
   
   // Overlay control state
   const [showPrecipitation, setShowPrecipitation] = useState(true);
@@ -88,15 +96,49 @@ const WeatherMap = () => {
     currentRoute: !!currentRoute
   });
 
-  // Get precipitation color based on intensity
+  // Get precipitation color based on intensity with enhanced vibrancy
   const getPrecipitationColor = useCallback((precipitation: number): string => {
-    if (precipitation === 0) return '#22c55e'; // Green - no rain
-    if (precipitation < 0.5) return '#84cc16'; // Light green - very light rain
-    if (precipitation < 1) return '#eab308'; // Yellow - light rain  
+    if (precipitation === 0) return '#10b981'; // Emerald - no rain
+    if (precipitation < 0.5) return '#84cc16'; // Lime - very light rain
+    if (precipitation < 1) return '#f59e0b'; // Amber - light rain  
     if (precipitation < 3) return '#f97316'; // Orange - moderate rain
     if (precipitation < 10) return '#ef4444'; // Red - heavy rain
     return '#dc2626'; // Dark red - very heavy rain
   }, []);
+
+  // Enhanced geolocation setup with user location as default
+  const setupUserLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      console.log('Geolocation not supported, using fallback location');
+      setCurrentLocation([-74.006, 40.7128]); // New York fallback
+      return;
+    }
+
+    const options = {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 300000 // 5 minutes cache
+    };
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const userLoc: [number, number] = [
+          position.coords.longitude,
+          position.coords.latitude
+        ];
+        console.log('User location obtained:', userLoc);
+        setUserLocation(userLoc);
+        if (!currentLocation) {
+          setCurrentLocation(userLoc);
+        }
+      },
+      (error) => {
+        console.log('Geolocation error:', error);
+        setCurrentLocation([-74.006, 40.7128]); // New York fallback
+      },
+      options
+    );
+  }, [currentLocation]);
 
   const visualizeWeatherRoute = useCallback(async (routeData: RouteData, departureTime: Date) => {
     if (!map.current) return;
@@ -233,8 +275,8 @@ const WeatherMap = () => {
       source: 'route',
       paint: {
         'line-color': ['get', 'color'],
-        'line-width': 8,
-        'line-opacity': 0.9
+        'line-width': 10,
+        'line-opacity': 0.95
       }
     });
 
@@ -414,89 +456,10 @@ const WeatherMap = () => {
     }
   };
 
-  // Enhanced GPS tracking for mobile devices
+  // Setup user location on component mount
   useEffect(() => {
-    console.log('Setting up mobile GPS tracking...');
-    
-    // Set default location immediately to allow map to initialize
-    if (!currentLocation) {
-      console.log('Setting default location (New York)');
-      setCurrentLocation([-74.006, 40.7128]);
-    }
-    
-    // Check if geolocation is available
-    if (!navigator.geolocation) {
-      console.log('Geolocation not supported, keeping default location');
-      return;
-    }
-
-    // Options optimized for mobile devices
-    const options = {
-      enableHighAccuracy: true,
-      timeout: 15000, // Longer timeout for mobile
-      maximumAge: 60000 // 1 minute cache for mobile efficiency
-    };
-
-    // For mobile Safari, request permission explicitly
-    const requestLocation = async () => {
-      try {
-        // Try to get permission first (for newer browsers)
-        if ('permissions' in navigator) {
-          const permission = await navigator.permissions.query({ name: 'geolocation' });
-          console.log('Geolocation permission:', permission.state);
-        }
-
-        const watchId = navigator.geolocation.watchPosition(
-          (position) => {
-            console.log('GPS position updated:', position.coords);
-            const newLocation: [number, number] = [
-              position.coords.longitude, 
-              position.coords.latitude
-            ];
-            setUserLocation(newLocation);
-            
-            // Set initial location if not set
-            if (!currentLocation) {
-              setCurrentLocation(newLocation);
-            }
-            
-            // Update user location marker on map
-            if (map.current) {
-              // Remove existing user location marker
-              const existingMarkers = document.querySelectorAll('[data-user-location="true"]');
-              existingMarkers.forEach(marker => marker.remove());
-              
-              // Add new user location marker
-              const el = document.createElement('div');
-              el.className = 'user-location-marker';
-              el.setAttribute('data-user-location', 'true');
-              el.innerHTML = '📍';
-              el.style.fontSize = '20px';
-              el.style.textAlign = 'center';
-              
-              new mapboxgl.Marker(el)
-                .setLngLat(newLocation)
-                .addTo(map.current);
-            }
-          },
-          (error) => {
-            console.log('Geolocation error:', error);
-            // Keep default location on error
-          },
-          options
-        );
-
-        // Store watchId to clear later if needed
-        return () => {
-          navigator.geolocation.clearWatch(watchId);
-        };
-      } catch (error) {
-        console.log('Geolocation setup error:', error);
-      }
-    };
-
-    requestLocation();
-  }, [currentLocation]);
+    setupUserLocation();
+  }, [setupUserLocation]);
 
   // Check for existing tokens on mount
   useEffect(() => {
@@ -604,7 +567,7 @@ const WeatherMap = () => {
       map.current = new mapboxgl.Map({
         container: mapContainer.current,
         style: 'mapbox://styles/mapbox/dark-v11',
-        center: currentLocation,
+        center: currentLocation || [-74.006, 40.7128],
         zoom: 10,
         pitch: 0,
         bearing: 0
@@ -627,55 +590,13 @@ const WeatherMap = () => {
       // Add navigation controls
       map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
-      // Add click handler for adding route points
+      // Add click handler for location selection dialog
       map.current.on('click', (e) => {
         const { lng, lat } = e.lngLat;
         console.log('Map clicked at:', { lng, lat });
         
-        const newPoint: RoutePoint = { lat, lng };
-        const newRoutePoints = [...routePoints, newPoint];
-        setRoutePoints(newRoutePoints);
-
-        // Add marker for the clicked point
-        if (map.current && map.current.isStyleLoaded()) {
-          const markerElement = document.createElement('div');
-          markerElement.className = 'route-marker';
-          markerElement.style.cssText = `
-            width: 32px;
-            height: 32px;
-            background-color: ${routePoints.length === 0 ? '#22c55e' : '#ef4444'};
-            border: 3px solid white;
-            border-radius: 50%;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 16px;
-            font-weight: bold;
-            color: white;
-            z-index: 1000;
-          `;
-          markerElement.innerHTML = routePoints.length === 0 ? '🚀' : (routePoints.length).toString();
-          markerElement.setAttribute('data-route-marker', 'true');
-          
-          new mapboxgl.Marker(markerElement)
-            .setLngLat([lng, lat])
-            .setPopup(
-              new mapboxgl.Popup({ offset: 25 }).setHTML(`
-                <div class="p-3 bg-gray-900 text-white rounded-lg shadow-lg border border-gray-600">
-                  <div class="font-semibold text-white">${routePoints.length === 0 ? 'Start Point' : `Point ${routePoints.length + 1}`}</div>
-                  <div class="text-sm text-gray-200">${lat.toFixed(4)}, ${lng.toFixed(4)}</div>
-                </div>
-              `)
-            )
-            .addTo(map.current!);
-        }
-
-        // Generate route if we have at least 2 points
-        if (newRoutePoints.length >= 2) {
-          generateRoute(newRoutePoints);
-        }
+        setClickedLocation({ lng, lat });
+        setShowLocationDialog(true);
       });
 
     } catch (error) {
@@ -793,6 +714,167 @@ const WeatherMap = () => {
 
   console.log('Rendering main weather map interface...');
 
+  // Location dialog handlers
+  const handleSetDeparture = () => {
+    if (!clickedLocation) return;
+    
+    const newPoint: RoutePoint = { 
+      lat: clickedLocation.lat, 
+      lng: clickedLocation.lng, 
+      name: 'Departure' 
+    };
+    
+    setRoutePoints([newPoint]);
+    setCurrentRoute(null);
+    
+    // Add departure marker
+    if (map.current) {
+      // Clear existing route markers
+      const routeMarkers = document.querySelectorAll('[data-route-marker="true"]');
+      routeMarkers.forEach(marker => marker.remove());
+      
+      const markerElement = document.createElement('div');
+      markerElement.className = 'route-marker';
+      markerElement.style.cssText = `
+        width: 32px;
+        height: 32px;
+        background-color: #10b981;
+        border: 3px solid white;
+        border-radius: 50%;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        font-weight: bold;
+        color: white;
+        z-index: 1000;
+      `;
+      markerElement.innerHTML = '🚀';
+      markerElement.setAttribute('data-route-marker', 'true');
+      
+      new mapboxgl.Marker(markerElement)
+        .setLngLat([clickedLocation.lng, clickedLocation.lat])
+        .addTo(map.current);
+    }
+  };
+
+  const handleSetDestination = () => {
+    if (!clickedLocation) return;
+    
+    const newPoint: RoutePoint = { 
+      lat: clickedLocation.lat, 
+      lng: clickedLocation.lng, 
+      name: 'Destination' 
+    };
+    
+    if (routePoints.length === 0) {
+      // If no departure point, set this as departure instead
+      handleSetDeparture();
+      return;
+    }
+    
+    const newRoutePoints = [routePoints[0], newPoint];
+    setRoutePoints(newRoutePoints);
+    
+    // Add destination marker
+    if (map.current) {
+      const markerElement = document.createElement('div');
+      markerElement.className = 'route-marker';
+      markerElement.style.cssText = `
+        width: 32px;
+        height: 32px;
+        background-color: #ef4444;
+        border: 3px solid white;
+        border-radius: 50%;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        font-weight: bold;
+        color: white;
+        z-index: 1000;
+      `;
+      markerElement.innerHTML = '🏁';
+      markerElement.setAttribute('data-route-marker', 'true');
+      
+      new mapboxgl.Marker(markerElement)
+        .setLngLat([clickedLocation.lng, clickedLocation.lat])
+        .addTo(map.current);
+    }
+    
+    // Generate route
+    generateRoute(newRoutePoints);
+  };
+
+  const handleAddStop = () => {
+    if (!clickedLocation) return;
+    
+    const newPoint: RoutePoint = { 
+      lat: clickedLocation.lat, 
+      lng: clickedLocation.lng, 
+      name: `Stop ${routePoints.length + 1}` 
+    };
+    
+    const newRoutePoints = [...routePoints, newPoint];
+    setRoutePoints(newRoutePoints);
+    
+    // Add waypoint marker
+    if (map.current) {
+      const markerElement = document.createElement('div');
+      markerElement.className = 'route-marker';
+      markerElement.style.cssText = `
+        width: 32px;
+        height: 32px;
+        background-color: #3b82f6;
+        border: 3px solid white;
+        border-radius: 50%;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        font-weight: bold;
+        color: white;
+        z-index: 1000;
+      `;
+      markerElement.innerHTML = routePoints.length.toString();
+      markerElement.setAttribute('data-route-marker', 'true');
+      
+      new mapboxgl.Marker(markerElement)
+        .setLngLat([clickedLocation.lng, clickedLocation.lat])
+        .addTo(map.current);
+    }
+    
+    // Generate route if we have at least 2 points
+    if (newRoutePoints.length >= 2) {
+      generateRoute(newRoutePoints);
+    }
+  };
+
+  // Prevent map position reset when changing time or overlays
+  useEffect(() => {
+    if (!preserveMapPosition && routePoints.length === 0 && !currentLocation) {
+      setPreserveMapPosition(true);
+    }
+  }, [preserveMapPosition, routePoints.length, currentLocation]);
+
+  // Update map position only when location changes, not on time/overlay changes
+  useEffect(() => {
+    if (map.current && currentLocation && !preserveMapPosition) {
+      map.current.flyTo({
+        center: currentLocation,
+        zoom: 10,
+        duration: 2000
+      });
+      setPreserveMapPosition(true);
+    }
+  }, [currentLocation, preserveMapPosition]);
+
   return (
     <div className="relative w-full h-screen overflow-hidden">
       {!hasWeatherAPI && (
@@ -835,26 +917,33 @@ const WeatherMap = () => {
 
       <div ref={mapContainer} className="w-full h-full" />
       
+      {/* Location Selection Dialog */}
+      <LocationDialog
+        isOpen={showLocationDialog}
+        onClose={() => setShowLocationDialog(false)}
+        onSetDeparture={handleSetDeparture}
+        onSetDestination={handleSetDestination}
+        onAddStop={handleAddStop}
+        coordinates={clickedLocation || { lng: 0, lat: 0 }}
+      />
+      
       {hasWeatherAPI && (
         <>
-          <div className="absolute top-4 right-4 z-10 space-y-2">
-            <TimeControls
-              currentHour={currentHour}
-              isAnimating={isAnimating}
-              onHourChange={setCurrentHour}
-              onToggleAnimation={() => setIsAnimating(!isAnimating)}
-              departureTime={departureTime}
-              onDepartureTimeChange={setDepartureTime}
-            />
-            <OverlayControls
-              showPrecipitation={showPrecipitation}
-              showClouds={showClouds}
-              onTogglePrecipitation={setShowPrecipitation}
-              onToggleClouds={setShowClouds}
-            />
-            <AddressSearch
-              mapboxToken={mapboxToken}
-              onLocationSelect={(lng: number, lat: number, placeName: string) => {
+          {/* Minimizable UI for mobile */}
+          <MinimizableUI
+            currentHour={currentHour}
+            isAnimating={isAnimating}
+            onHourChange={setCurrentHour}
+            onToggleAnimation={() => setIsAnimating(!isAnimating)}
+            departureTime={departureTime}
+            onDepartureTimeChange={setDepartureTime}
+            showPrecipitation={showPrecipitation}
+            showClouds={showClouds}
+            onTogglePrecipitation={setShowPrecipitation}
+            onToggleClouds={setShowClouds}
+            mapboxToken={mapboxToken}
+            onLocationSelect={(lng: number, lat: number, placeName: string) => {
+              if (!preserveMapPosition) {
                 setCurrentLocation([lng, lat]);
                 if (map.current) {
                   map.current.flyTo({
@@ -863,28 +952,15 @@ const WeatherMap = () => {
                     duration: 2000
                   });
                 }
-              }}
-              onStartNavigation={() => {}}
-            />
-            {routePoints.length > 0 && (
-              <Button onClick={clearRoute} variant="outline" size="sm">
-                Clear Route
-              </Button>
-            )}
-          </div>
-          
-          <div className="absolute top-4 left-4 z-10">
-            {(departureWeather || arrivalWeather) && (
-              <WeatherForecast
-                departureWeather={departureWeather}
-                arrivalWeather={arrivalWeather}
-                departureLocation="Departure"
-                arrivalLocation="Destination"
-                departureTime={departureTime}
-                arrivalTime={currentRoute ? new Date(departureTime.getTime() + currentRoute.duration * 1000) : undefined}
-              />
-            )}
-          </div>
+              }
+            }}
+            onStartNavigation={() => {}}
+            departureWeather={departureWeather}
+            arrivalWeather={arrivalWeather}
+            arrivalTime={currentRoute ? new Date(departureTime.getTime() + currentRoute.duration * 1000) : undefined}
+            onClearRoute={clearRoute}
+            routePoints={routePoints}
+          />
           
           <div className="absolute bottom-4 right-4 z-10">
             <WeatherLegend />
@@ -893,7 +969,7 @@ const WeatherMap = () => {
       )}
       
       {routePoints.length > 0 && (
-        <div className="absolute bottom-4 left-4 z-10 bg-card border border-border rounded-lg p-3 shadow-lg">
+        <div className="absolute bottom-4 left-4 z-10 bg-card/95 backdrop-blur-sm border rounded-lg p-3 shadow-lg">
           <div className="text-sm font-medium mb-1">
             Route: {routePoints.length} point{routePoints.length !== 1 ? 's' : ''}
           </div>
