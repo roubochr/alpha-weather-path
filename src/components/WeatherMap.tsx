@@ -262,14 +262,15 @@ const WeatherMap = () => {
           console.warn(`Failed to get weather for point ${index}:`, error);
         }
         
-        // Fallback to default weather if API fails
+        // Fallback to default weather with some test variation if API fails
+        const testPrecipitation = Math.random() * 5; // Random for testing
         return {
           coordinate: point.coordinate,
           arrivalTime: point.arrivalTime,
           weather: {
-            temperature: 20,
+            temperature: 20 + Math.random() * 10,
             condition: 'Clear',
-            precipitation: 0,
+            precipitation: testPrecipitation,
             humidity: 50,
             pressure: 1013,
             windSpeed: 5,
@@ -282,9 +283,12 @@ const WeatherMap = () => {
     );
 
     // Remove existing route layers and markers
-    if (map.current.getLayer('route-line')) {
-      map.current.removeLayer('route-line');
-    }
+    ['route-line', 'route-line-glow'].forEach(layerId => {
+      if (map.current!.getLayer(layerId)) {
+        map.current!.removeLayer(layerId);
+      }
+    });
+    
     if (map.current.getSource('route')) {
       map.current.removeSource('route');
     }
@@ -303,6 +307,9 @@ const WeatherMap = () => {
       // Get colors for smooth transitions
       const startColor = getPrecipitationColor(segment.weather.precipitation);
       const endColor = getPrecipitationColor(nextSegment.weather.precipitation);
+      
+      console.log(`Segment ${i}: precipitation=${segment.weather.precipitation}mm/h, color=${startColor}`);
+      console.log(`Next segment: precipitation=${nextSegment.weather.precipitation}mm/h, color=${endColor}`);
       
       // Find exact coordinates in route for smooth path following
       const segmentCoords = [];
