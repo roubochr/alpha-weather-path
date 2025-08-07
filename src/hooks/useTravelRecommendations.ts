@@ -212,17 +212,17 @@ export const useTravelRecommendations = () => {
       
       let windows: TravelWindow[];
       
-      if (isShortTrip && localStorage.getItem('accuweather-api-key')) {
-        // Use AccuWeather MinuteCast for short trips
+      if (isShortTrip) {
+        // Use AccuWeather MinuteCast for short trips (API key is embedded)
         console.log('Using AccuWeather MinuteCast for short trip');
         windows = await generateAccuWeatherWindows(routeCoordinates, currentTime, routeDuration);
       } else {
-        // Use OpenWeatherMap for longer trips or if AccuWeather not available
+        // Use OpenWeatherMap for longer trips
         console.log('Using OpenWeatherMap for trip');
         windows = findOptimalDepartureWindow(routeCoordinates, currentTime, routeDuration, hourlyForecasts);
       }
       const bestWindow = windows[0];
-      const currentWindow = isShortTrip && localStorage.getItem('accuweather-api-key') 
+      const currentWindow = isShortTrip 
         ? await calculateAccuWeatherWindow(routeCoordinates, currentTime, routeDuration)
         : calculateTravelWindow(routeCoordinates, currentTime, routeDuration, hourlyForecasts);
 
