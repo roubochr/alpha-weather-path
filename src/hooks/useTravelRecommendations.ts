@@ -39,16 +39,20 @@ export const useTravelRecommendations = () => {
     routeCoordinates: [number, number][],
     departureTime: Date,
     routeDuration: number,
-    hourlyForecasts: { [coordinate: string]: { [hour: number]: any } }
+    hourlyForecasts: { [coordinate: string]: { [timeKey: number]: any } }
   ): TravelWindow => {
     let totalRain = 0;
     let maxRain = 0;
     let rainSamples = 0;
 
     const arrivalTime = new Date(departureTime.getTime() + routeDuration * 1000);
+    
+    // Check if trip extends beyond forecast range
+    const maxForecastTime = new Date(Date.now() + 120 * 60 * 60 * 1000);
+    const tripBeyondForecast = arrivalTime > maxForecastTime;
 
     // Sample weather at key points along the route
-    const samplePoints = Math.min(routeCoordinates.length, 10);
+    const samplePoints = Math.min(routeCoordinates.length, 20);
     const step = Math.max(1, Math.floor(routeCoordinates.length / samplePoints));
 
     for (let i = 0; i < routeCoordinates.length; i += step) {
@@ -61,8 +65,27 @@ export const useTravelRecommendations = () => {
         const timeToPoint = routeDuration * progressRatio * 1000;
         const pointArrivalTime = new Date(departureTime.getTime() + timeToPoint);
         
-        const hour = pointArrivalTime.getHours();
-        const weather = hourlyForecasts[coordKey][hour];
+        // Skip points beyond forecast range
+        if (pointArrivalTime > maxForecastTime) {
+          continue;
+        }
+        
+        const timeKey = Math.floor(pointArrivalTime.getTime() / (3600 * 1000));
+        let weather = hourlyForecasts[coordKey][timeKey];
+        
+        // Try to find closest forecast if exact time not available
+        if (!weather) {
+          for (let offset = 1; offset <= 3; offset++) {
+            if (hourlyForecasts[coordKey][timeKey - offset]) {
+              weather = hourlyForecasts[coordKey][timeKey - offset];
+              break;
+            }
+            if (hourlyForecasts[coordKey][timeKey + offset]) {
+              weather = hourlyForecasts[coordKey][timeKey + offset];
+              break;
+            }
+          }
+        }
         
         if (weather && weather.precipitation !== undefined) {
           totalRain += weather.precipitation;
@@ -73,7 +96,12 @@ export const useTravelRecommendations = () => {
     }
 
     const averageRain = rainSamples > 0 ? totalRain / rainSamples : 0;
-    const riskLevel = analyzeRainRisk(maxRain);
+    let riskLevel = analyzeRainRisk(maxRain);
+    
+    // Increase risk level for trips extending beyond forecast range
+    if (tripBeyondForecast && rainSamples < samplePoints * 0.3) {
+      riskLevel = riskLevel === 'low' ? 'medium' : 'high';
+    }
 
     return {
       departureTime,
