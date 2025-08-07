@@ -293,48 +293,81 @@ const WeatherMap = () => {
     const existingMarkers = document.querySelectorAll('[data-weather-marker="true"]');
     existingMarkers.forEach(marker => marker.remove());
 
-    // Create multiple line segments with different colors based on precipitation
+    // Create multiple line segments with smooth gradients and better curves
     const lineSegments = [];
+    
     for (let i = 0; i < weatherSegments.length - 1; i++) {
       const segment = weatherSegments[i];
       const nextSegment = weatherSegments[i + 1];
       
-      // Interpolate between segment coordinates for smoother line
+      // Get colors for smooth transitions
+      const startColor = getPrecipitationColor(segment.weather.precipitation);
+      const endColor = getPrecipitationColor(nextSegment.weather.precipitation);
+      
+      // Find exact coordinates in route for smooth path following
       const segmentCoords = [];
       const startIdx = coordinates.findIndex(coord => 
-        Math.abs(coord[0] - segment.coordinate[0]) < 0.001 && 
-        Math.abs(coord[1] - segment.coordinate[1]) < 0.001
+        Math.abs(coord[0] - segment.coordinate[0]) < 0.01 && 
+        Math.abs(coord[1] - segment.coordinate[1]) < 0.01
       );
       const endIdx = coordinates.findIndex(coord => 
-        Math.abs(coord[0] - nextSegment.coordinate[0]) < 0.001 && 
-        Math.abs(coord[1] - nextSegment.coordinate[1]) < 0.001
+        Math.abs(coord[0] - nextSegment.coordinate[0]) < 0.01 && 
+        Math.abs(coord[1] - nextSegment.coordinate[1]) < 0.01
       );
       
       if (startIdx !== -1 && endIdx !== -1) {
+        // Use actual route coordinates for perfect path following
         for (let j = startIdx; j <= endIdx; j++) {
           segmentCoords.push(coordinates[j]);
         }
       } else {
+        // Fallback to direct line
         segmentCoords.push(segment.coordinate, nextSegment.coordinate);
+      }
+
+      // Create smooth interpolated points for better curves
+      const smoothedCoords = [];
+      for (let j = 0; j < segmentCoords.length; j++) {
+        smoothedCoords.push(segmentCoords[j]);
+        
+        // Add intermediate points for smoother visual curves
+        if (j < segmentCoords.length - 1) {
+          const curr = segmentCoords[j];
+          const next = segmentCoords[j + 1];
+          
+          // Add two intermediate points for very smooth curves
+          const third1 = [
+            curr[0] + (next[0] - curr[0]) * 0.33,
+            curr[1] + (next[1] - curr[1]) * 0.33
+          ];
+          const third2 = [
+            curr[0] + (next[0] - curr[0]) * 0.66,
+            curr[1] + (next[1] - curr[1]) * 0.66
+          ];
+          
+          smoothedCoords.push(third1, third2);
+        }
       }
 
       lineSegments.push({
         type: 'Feature',
         properties: {
-          color: getPrecipitationColor(segment.weather.precipitation),
+          color: startColor,
+          gradientEnd: endColor,
           precipitation: segment.weather.precipitation,
           temperature: segment.weather.temperature,
           condition: segment.weather.condition,
-          arrivalTime: segment.arrivalTime.toLocaleTimeString()
+          arrivalTime: segment.arrivalTime.toLocaleTimeString(),
+          segmentIndex: i
         },
         geometry: {
           type: 'LineString',
-          coordinates: segmentCoords
+          coordinates: smoothedCoords
         }
       });
     }
 
-    // Add route source and layer
+    // Add route source and layers with glow effect
     map.current.addSource('route', {
       type: 'geojson',
       data: {
@@ -343,13 +376,35 @@ const WeatherMap = () => {
       }
     });
 
+    // Add glow layer first (behind main line)
+    map.current.addLayer({
+      id: 'route-line-glow',
+      type: 'line',
+      source: 'route',
+      layout: {
+        'line-join': 'round',
+        'line-cap': 'round'
+      },
+      paint: {
+        'line-color': ['get', 'color'],
+        'line-width': 16,
+        'line-opacity': 0.25,
+        'line-blur': 4
+      }
+    });
+
+    // Add main route line with smooth joins
     map.current.addLayer({
       id: 'route-line',
       type: 'line',
       source: 'route',
+      layout: {
+        'line-join': 'round',
+        'line-cap': 'round'
+      },
       paint: {
         'line-color': ['get', 'color'],
-        'line-width': 10,
+        'line-width': 8,
         'line-opacity': 0.95
       }
     });
@@ -800,10 +855,13 @@ const WeatherMap = () => {
     setCurrentRoute(null);
     
     if (map.current) {
-      // Remove route layer
-      if (map.current.getLayer('route-line')) {
-        map.current.removeLayer('route-line');
-      }
+      // Remove route layers
+      ['route-line', 'route-line-glow'].forEach(layerId => {
+        if (map.current!.getLayer(layerId)) {
+          map.current!.removeLayer(layerId);
+        }
+      });
+      
       if (map.current.getSource('route')) {
         map.current.removeSource('route');
       }
