@@ -775,16 +775,12 @@ const WeatherMap = () => {
     }
   }, [departureTime, routePoints, generateRoute]);
 
-  // Handle current hour changes - regenerate route weather for new time
+  // Handle current hour changes - only update weather overlay, not route departure time
   useEffect(() => {
-    if (routePoints.length >= 2) {
-      console.log('Regenerating route for new hour:', currentHour);
-      // Update departure time to reflect the current hour selection
-      const newDepartureTime = new Date(departureTime);
-      newDepartureTime.setHours(currentHour);
-      setDepartureTime(newDepartureTime);
-    }
-  }, [currentHour, routePoints]);
+    console.log('Weather overlay hour changed to:', currentHour);
+    // The currentHour only affects weather overlay visualization, not route planning
+    // Route planning uses the separate departureTime state set by time controls
+  }, [currentHour]);
 
   const handleApiKeySubmit = (apiKey: string) => {
     localStorage.setItem('openweather-api-key', apiKey);
