@@ -510,10 +510,16 @@ const WeatherMap = () => {
     if (!mapboxToken) {
       mapboxToken = 'pk.eyJ1IjoiYm9vYm9zIiwiYSI6ImNtZHo4emZ3cjBhZWYydnB5b2o4aGh6YjYifQ.rvTwrB2pOlZwt_1j8scLSw';
       localStorage.setItem('mapbox-token', mapboxToken);
+      setShowTokenInput(false);
     }
     
     setHasApiKey(!!apiKey);
     setMapboxToken(mapboxToken);
+    
+    // Only show token input if no token exists
+    if (!mapboxToken) {
+      setShowTokenInput(true);
+    }
   }, []);
 
   const handleTokenSubmit = (token: string) => {
@@ -530,16 +536,6 @@ const WeatherMap = () => {
   useEffect(() => {
     setupUserLocation();
   }, [setupUserLocation]);
-
-  // Check for existing tokens on mount
-  useEffect(() => {
-    const savedToken = localStorage.getItem('mapbox-token');
-    if (savedToken) {
-      setMapboxToken(savedToken);
-    } else {
-      setShowTokenInput(true);
-    }
-  }, []);
 
   // Add weather layer to the map with time-based functionality
   const addWeatherLayer = useCallback(async () => {
