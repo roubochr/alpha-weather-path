@@ -32,10 +32,13 @@ const AddressSearch: React.FC<AddressSearchProps> = ({
   const [results, setResults] = useState<GeocodingResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [showResults, setShowResults] = useState(false);
+  const [searchTimeout, setSearchTimeout] = useState<NodeJS.Timeout | null>(null);
 
   const searchAddresses = useCallback(async (searchQuery: string) => {
     if (!searchQuery.trim() || !mapboxToken) {
       console.log('Search skipped - missing query or token');
+      setResults([]);
+      setShowResults(false);
       return;
     }
 
@@ -63,6 +66,27 @@ const AddressSearch: React.FC<AddressSearchProps> = ({
       setLoading(false);
     }
   }, [mapboxToken]);
+
+  // Auto-search with debounce
+  const handleQueryChange = useCallback((value: string) => {
+    setQuery(value);
+    
+    // Clear existing timeout
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+    }
+    
+    // Set new timeout for auto-search
+    if (value.trim().length >= 2) {
+      const timeout = setTimeout(() => {
+        searchAddresses(value);
+      }, 300); // 300ms debounce
+      setSearchTimeout(timeout);
+    } else {
+      setResults([]);
+      setShowResults(false);
+    }
+  }, [searchAddresses, searchTimeout]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,7 +121,7 @@ const AddressSearch: React.FC<AddressSearchProps> = ({
             type="text"
             placeholder="Search for an address or place..."
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => handleQueryChange(e.target.value)}
             className="pl-10"
           />
         </div>
@@ -116,49 +140,19 @@ const AddressSearch: React.FC<AddressSearchProps> = ({
       </form>
 
       {showResults && results.length > 0 && (
-        <Card className="absolute top-full left-0 right-0 mt-2 z-50 max-h-80 overflow-y-auto">
+        <Card className="absolute top-full left-0 right-0 mt-2 z-50 max-h-80 overflow-y-auto bg-background border-border">
           <div className="p-2">
             {results.map((result, index) => (
-              <div key={index} className="border-b border-border last:border-b-0">
-                <div className="flex items-center space-x-2 p-2 hover:bg-muted rounded">
+              <div 
+                key={index} 
+                className="border-b border-border last:border-b-0 cursor-pointer hover:bg-muted/50 rounded transition-colors"
+                onClick={() => handleLocationSelect(result)}
+              >
+                <div className="flex items-center space-x-2 p-2">
                   <MapPin className="h-4 w-4 text-primary flex-shrink-0" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{result.place_name}</p>
                   </div>
-                </div>
-                <div className="flex gap-2 px-2 pb-2">
-                  {onSetDeparture && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        const [lng, lat] = result.center;
-                        onSetDeparture(lng, lat, result.place_name);
-                        setQuery(result.place_name);
-                        setShowResults(false);
-                      }}
-                      className="h-8 text-xs flex-1"
-                    >
-                      <div className="w-3 h-3 bg-emerald-500 rounded-full mr-1"></div>
-                      Set as Departure
-                    </Button>
-                  )}
-                  {onSetDestination && (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        const [lng, lat] = result.center;
-                        onSetDestination(lng, lat, result.place_name);
-                        setQuery(result.place_name);
-                        setShowResults(false);
-                      }}
-                      className="h-8 text-xs flex-1"
-                    >
-                      <div className="w-3 h-3 bg-red-500 rounded-full mr-1"></div>
-                      Set as Destination
-                    </Button>
-                  )}
                 </div>
               </div>
             ))}

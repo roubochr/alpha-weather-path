@@ -1149,16 +1149,8 @@ const WeatherMap = () => {
             onToggleClouds={setShowClouds}
             mapboxToken={mapboxToken}
             onLocationSelect={(lng: number, lat: number, placeName: string) => {
-              if (!preserveMapPosition) {
-                setCurrentLocation([lng, lat]);
-                if (map.current) {
-                  map.current.flyTo({
-                    center: [lng, lat],
-                    zoom: 12,
-                    duration: 2000
-                  });
-                }
-              }
+              setClickedLocation({ lng, lat });
+              setShowLocationDialog(true);
             }}
             onStartNavigation={() => {}}
             departureWeather={departureWeather}
