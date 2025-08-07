@@ -1137,7 +1137,7 @@ const WeatherMap = () => {
           
           {/* Travel Recommendations Panel */}
           {routePoints.length >= 2 && currentRoute && (
-            <div className="absolute top-6 right-6 z-10 w-72 max-h-[calc(100vh-8rem)] overflow-y-auto">
+            <div className="absolute top-6 left-6 z-10 w-80 max-h-[calc(100vh-8rem)] overflow-y-auto">
               <TravelRecommendations
                 recommendation={travelRecommendation}
                 loading={recommendationLoading}
@@ -1152,7 +1152,7 @@ const WeatherMap = () => {
             </div>
           )}
           
-          <div className="absolute bottom-6 right-6 z-10">
+          <div className="absolute bottom-4 right-4 z-10">
             <WeatherLegend />
           </div>
         </>
