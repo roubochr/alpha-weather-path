@@ -23,16 +23,20 @@ export const useAccuWeather = () => {
     }
 
     try {
-      const response = await fetch(
-        `https://dataservice.accuweather.com/locations/v1/cities/geoposition/search?apikey=${apiKey}&q=${lat},${lon}`
-      );
+      const response = await fetch('/functions/v1/accuweather-location', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ apiKey, lat, lon }),
+      });
 
       if (!response.ok) {
         throw new Error('Failed to get location key');
       }
 
       const data = await response.json();
-      return data.Key;
+      return data.locationKey;
     } catch (err) {
       console.error('Error getting AccuWeather location key:', err);
       return null;
@@ -56,9 +60,13 @@ export const useAccuWeather = () => {
       }
 
       // Get MinuteCast data
-      const response = await fetch(
-        `https://dataservice.accuweather.com/forecasts/v1/minute?apikey=${apiKey}&locationKey=${locationKey}&details=true`
-      );
+      const response = await fetch('/functions/v1/accuweather-minutecast', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ apiKey, locationKey }),
+      });
 
       if (!response.ok) {
         throw new Error('Failed to fetch MinuteCast data');
