@@ -32,7 +32,7 @@ const WeatherOverlay: React.FC<WeatherOverlayProps> = ({ weather, position }) =>
   };
 
   return (
-    <Card className={`p-3 max-w-xs backdrop-blur-sm bg-card/95 ${getWeatherColor(weather.condition)}`}>
+    <Card className={`p-3 max-w-xs bg-background/95 backdrop-blur-sm border border-border ${getWeatherColor(weather.condition)}`}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center space-x-2">
           <img 

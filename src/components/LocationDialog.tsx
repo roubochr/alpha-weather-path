@@ -28,7 +28,7 @@ const LocationDialog: React.FC<LocationDialogProps> = ({
 }) => {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md bg-background border border-border">
         <DialogHeader>
           <DialogTitle className="flex items-center">
             <MapPin className="h-5 w-5 mr-2 text-primary" />
