@@ -383,9 +383,10 @@ const WeatherMap = () => {
     setCurrentRoute(routeData);
   }, [mapboxToken, getRoute, visualizeWeatherRoute, departureTime]);
 
-  // Check for existing API key on mount and set the provided key
+  // Check for existing tokens on mount and set defaults
   useEffect(() => {
     let apiKey = localStorage.getItem('openweather-api-key');
+    let mapboxToken = localStorage.getItem('mapbox-token');
     
     // Set the provided API key if none exists
     if (!apiKey) {
@@ -393,7 +394,14 @@ const WeatherMap = () => {
       localStorage.setItem('openweather-api-key', apiKey);
     }
     
+    // Set the provided Mapbox token if none exists
+    if (!mapboxToken) {
+      mapboxToken = 'pk.eyJ1IjoiYm9vYm9zIiwiYSI6ImNtZHo4emZ3cjBhZWYydnB5b2o4aGh6YjYifQ.rvTwrB2pOlZwt_1j8scLSw';
+      localStorage.setItem('mapbox-token', mapboxToken);
+    }
+    
     setHasApiKey(!!apiKey);
+    setMapboxToken(mapboxToken);
   }, []);
 
   const handleTokenSubmit = (token: string) => {
