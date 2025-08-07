@@ -122,7 +122,19 @@ const TimeControls: React.FC<TimeControlsProps> = ({
           </div>
           
           {/* Date controls */}
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                const newTime = new Date(departureTime);
+                newTime.setDate(newTime.getDate() + 1);
+                onDepartureTimeChange(newTime);
+              }}
+              className="text-xs"
+            >
+              +1 Day
+            </Button>
             <Button
               size="sm"
               variant="outline"
