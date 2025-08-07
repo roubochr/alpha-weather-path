@@ -155,7 +155,7 @@ const WeatherMap = () => {
   }, []);
 
   // Enhanced geolocation setup with user location as default
-  const setupUserLocation = useCallback(() => {
+  const setupUserLocation = useCallback((forceRequest = false) => {
     if (!navigator.geolocation) {
       console.log('Geolocation not supported, using fallback location');
       if (!currentLocation) {
@@ -167,7 +167,7 @@ const WeatherMap = () => {
     const options = {
       enableHighAccuracy: true,
       timeout: 10000,
-      maximumAge: 300000 // 5 minutes cache
+      maximumAge: forceRequest ? 0 : 300000 // Force fresh location if requested
     };
 
     navigator.geolocation.getCurrentPosition(
@@ -181,16 +181,34 @@ const WeatherMap = () => {
         if (!currentLocation && !preserveMapPosition) {
           setCurrentLocation(userLoc);
         }
+        // If forcing request, update current location and center map
+        if (forceRequest) {
+          setCurrentLocation(userLoc);
+          if (map.current) {
+            map.current.flyTo({
+              center: userLoc,
+              zoom: 12,
+              duration: 1500
+            });
+          }
+        }
       },
       (error) => {
         console.log('Geolocation error:', error);
+        if (!currentLocation || forceRequest) {
+          toast({
+            title: "Location Access Denied",
+            description: "Please allow location access or search for a location manually.",
+            variant: "destructive"
+          });
+        }
         if (!currentLocation) {
           setCurrentLocation([-74.006, 40.7128]); // New York fallback
         }
       },
       options
     );
-  }, [currentLocation, preserveMapPosition]);
+  }, [currentLocation, preserveMapPosition, map, toast]);
 
   const visualizeWeatherRoute = useCallback(async (routeData: RouteData, departureTime: Date) => {
     if (!map.current) return;
@@ -539,10 +557,12 @@ const WeatherMap = () => {
     }
   };
 
-  // Setup user location on component mount
+  // Setup user location on component mount - only ask once initially
   useEffect(() => {
-    setupUserLocation();
-  }, [setupUserLocation]);
+    if (!currentLocation) {
+      setupUserLocation();
+    }
+  }, []); // Empty dependency array to only run once on mount
 
   // Add weather layer to the map with time-based functionality
   const addWeatherLayer = useCallback(async () => {
@@ -1152,7 +1172,16 @@ const WeatherMap = () => {
             </div>
           )}
           
-          <div className="absolute bottom-4 right-4 z-10">
+          <div className="absolute bottom-4 right-4 z-10 space-y-3">
+            <Button
+              onClick={() => setupUserLocation(true)}
+              size="sm"
+              variant="outline"
+              className="bg-card/95 backdrop-blur-sm border-border hover:bg-accent"
+              title="Get my location"
+            >
+              <MapPin className="w-4 h-4" />
+            </Button>
             <WeatherLegend />
           </div>
         </>
