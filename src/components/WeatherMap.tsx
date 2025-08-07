@@ -566,14 +566,30 @@ const WeatherMap = () => {
     try {
       mapboxgl.accessToken = mapboxToken;
       
-      map.current = new mapboxgl.Map({
+      // Safari iOS compatibility fixes
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+      
+      const mapOptions: any = {
         container: mapContainer.current,
         style: 'mapbox://styles/mapbox/dark-v11',
         center: currentLocation || [-74.006, 40.7128],
         zoom: 10,
         pitch: 0,
-        bearing: 0
-      });
+        bearing: 0,
+        attributionControl: false,
+        logoPosition: 'bottom-left'
+      };
+      
+      // Additional iOS Safari fixes
+      if (isIOS || isSafari) {
+        mapOptions.preserveDrawingBuffer = true;
+        mapOptions.antialias = false;
+        mapOptions.failIfMajorPerformanceCaveat = false;
+        mapOptions.renderWorldCopies = false;
+      }
+      
+      map.current = new mapboxgl.Map(mapOptions);
 
       map.current.on('load', () => {
         console.log('Map loaded successfully');
