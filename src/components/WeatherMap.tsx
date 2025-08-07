@@ -47,6 +47,8 @@ const WeatherMap = () => {
   const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [preserveMapPosition, setPreserveMapPosition] = useState(false);
+  const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
+  const [mapZoom, setMapZoom] = useState<number>(10);
   
   // Route and navigation state
   const [routePoints, setRoutePoints] = useState<RoutePoint[]>([]);
@@ -590,6 +592,16 @@ const WeatherMap = () => {
       // Add navigation controls
       map.current.addControl(new mapboxgl.NavigationControl(), 'top-right');
 
+      // Track map center and zoom changes to preserve position
+      map.current.on('moveend', () => {
+        if (map.current) {
+          const center = map.current.getCenter();
+          const zoom = map.current.getZoom();
+          setMapCenter([center.lng, center.lat]);
+          setMapZoom(zoom);
+        }
+      });
+
       // Add click handler for location selection dialog
       map.current.on('click', (e) => {
         const { lng, lat } = e.lngLat;
@@ -610,11 +622,21 @@ const WeatherMap = () => {
     };
   }, [mapboxToken, currentLocation, addWeatherLayer, routePoints, generateRoute]);
 
-  // Handle hour changes for time slider
+  // Handle hour changes for time slider - don't move map
   useEffect(() => {
     console.log('Hour changed to:', currentHour);
     if ((window as any).updateWeatherLayer && map.current && map.current.isStyleLoaded()) {
+      // Preserve current map position
+      const currentCenter = map.current.getCenter();
+      const currentZoom = map.current.getZoom();
+      
       (window as any).updateWeatherLayer(currentHour, showPrecipitation, showClouds);
+      
+      // Restore map position after weather update
+      map.current.jumpTo({
+        center: [currentCenter.lng, currentCenter.lat],
+        zoom: currentZoom
+      });
     }
   }, [currentHour, showPrecipitation, showClouds]);
 
@@ -874,6 +896,16 @@ const WeatherMap = () => {
       setPreserveMapPosition(true);
     }
   }, [currentLocation, preserveMapPosition]);
+
+  // Effect to handle overlay changes without moving map
+  useEffect(() => {
+    if (map.current && map.current.isStyleLoaded() && mapCenter && preserveMapPosition) {
+      // Only update weather layers without moving map
+      if ((window as any).updateWeatherLayer) {
+        (window as any).updateWeatherLayer(currentHour, showPrecipitation, showClouds);
+      }
+    }
+  }, [showPrecipitation, showClouds, mapCenter, preserveMapPosition, currentHour]);
 
   return (
     <div className="relative w-full h-screen overflow-hidden">
