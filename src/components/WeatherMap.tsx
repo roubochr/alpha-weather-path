@@ -262,15 +262,14 @@ const WeatherMap = () => {
           console.warn(`Failed to get weather for point ${index}:`, error);
         }
         
-        // Fallback to default weather with some test variation if API fails
-        const testPrecipitation = Math.random() * 5; // Random for testing
+        // Fallback to default weather if API fails
         return {
           coordinate: point.coordinate,
           arrivalTime: point.arrivalTime,
           weather: {
-            temperature: 20 + Math.random() * 10,
+            temperature: 20,
             condition: 'Clear',
-            precipitation: testPrecipitation,
+            precipitation: 0,
             humidity: 50,
             pressure: 1013,
             windSpeed: 5,
