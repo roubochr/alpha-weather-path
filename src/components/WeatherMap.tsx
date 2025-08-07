@@ -604,7 +604,9 @@ const WeatherMap = () => {
             tiles: [
               `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=ba3708802ed7275ee958045d0a9a0f99`
             ],
-            tileSize: 256
+            tileSize: 256,
+            minzoom: 0,
+            maxzoom: 18
           });
 
           map.current.addLayer({
@@ -612,7 +614,8 @@ const WeatherMap = () => {
             type: 'raster',
             source: 'precipitation-tiles',
             paint: {
-              'raster-opacity': 0.7
+              'raster-opacity': 0.7,
+              'raster-resampling': 'nearest'
             }
           });
         }
@@ -624,7 +627,9 @@ const WeatherMap = () => {
             tiles: [
               `https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=ba3708802ed7275ee958045d0a9a0f99`
             ],
-            tileSize: 256
+            tileSize: 256,
+            minzoom: 0,
+            maxzoom: 18
           });
 
           map.current.addLayer({
@@ -632,7 +637,8 @@ const WeatherMap = () => {
             type: 'raster',
             source: 'cloud-tiles',
             paint: {
-              'raster-opacity': 0.4
+              'raster-opacity': 0.4,
+              'raster-resampling': 'nearest'
             }
           });
         }
