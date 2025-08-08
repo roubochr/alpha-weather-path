@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Search, MapPin, Navigation } from 'lucide-react';
+import { Search, MapPin } from 'lucide-react';
 
 interface GeocodingResult {
   place_name: string;
@@ -22,7 +22,7 @@ interface AddressSearchProps {
 
 const AddressSearch: React.FC<AddressSearchProps> = ({ 
   onLocationSelect, 
-  onStartNavigation,
+  onStartNavigation: _onStartNavigation,
   mapboxToken,
   onSetDeparture,
   onSetDestination
@@ -125,17 +125,15 @@ const AddressSearch: React.FC<AddressSearchProps> = ({
             className="pl-10 h-11"
           />
         </div>
-        <Button type="submit" disabled={loading || !query.trim()}>
-          {loading ? 'Searching...' : 'Search'}
-        </Button>
         <Button 
-          type="button" 
-          variant="outline"
-          onClick={onStartNavigation}
-          className="flex items-center space-x-1"
+          type="submit" 
+          size="icon"
+          disabled={loading || !query.trim()}
+          aria-label="Search"
+          title="Search"
+          className="h-11 w-11"
         >
-          <Navigation className="h-4 w-4" />
-          <span>Navigate</span>
+          <Search className="h-4 w-4" />
         </Button>
       </form>
 
