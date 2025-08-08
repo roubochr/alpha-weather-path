@@ -4,7 +4,7 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Cloud, CloudRain, Sun, AlertTriangle, MapPin, Wind, Droplets, Eye, Thermometer } from 'lucide-react';
+import { Cloud, CloudRain, Sun, AlertTriangle, MapPin, Wind, Droplets, Eye, Thermometer, ChevronLeft, ChevronRight } from 'lucide-react';
 import AddressSearch from '@/components/AddressSearch';
 import { useRouting, RouteData } from '@/hooks/useRouting';
 import { useTimeBasedWeather, TimeBasedWeatherData } from '@/hooks/useTimeBasedWeather';
@@ -73,6 +73,7 @@ const WeatherMap = () => {
   const [showRouteInfo, setShowRouteInfo] = useState(true);
   const [routeInfoTimer, setRouteInfoTimer] = useState<NodeJS.Timeout | null>(null);
   const [hasTimeUpdates, setHasTimeUpdates] = useState(false);
+  const [showTravelRecommendations, setShowTravelRecommendations] = useState(true);
   
   // Overlay control state
   const [showPrecipitation, setShowPrecipitation] = useState(true);
@@ -1244,7 +1245,7 @@ const WeatherMap = () => {
           />
           
           {/* Travel Recommendations Panel */}
-          {routePoints.length >= 2 && currentRoute && (
+          {routePoints.length >= 2 && currentRoute && showTravelRecommendations && (
             <div className="absolute top-6 left-6 z-10 w-80 max-h-[calc(100vh-8rem)] overflow-y-auto">
               <TravelRecommendations
                 recommendation={travelRecommendation}
@@ -1257,6 +1258,25 @@ const WeatherMap = () => {
                   });
                 }}
               />
+            </div>
+          )}
+          
+          {/* Toggle button for travel recommendations */}
+          {routePoints.length >= 2 && currentRoute && (
+            <div className="absolute top-4 left-4 z-10">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowTravelRecommendations(!showTravelRecommendations)}
+                className="bg-card/95 backdrop-blur-sm border-border hover:bg-accent"
+                title={showTravelRecommendations ? "Hide Travel Recommendations" : "Show Travel Recommendations"}
+              >
+                {showTravelRecommendations ? (
+                  <ChevronLeft className="w-4 h-4" />
+                ) : (
+                  <ChevronRight className="w-4 h-4" />
+                )}
+              </Button>
             </div>
           )}
           
