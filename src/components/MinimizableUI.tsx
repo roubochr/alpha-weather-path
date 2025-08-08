@@ -77,7 +77,7 @@ const MinimizableUI: React.FC<MinimizableUIProps> = ({
   }
 
   return (
-    <div className="fixed top-4 right-4 z-50 w-80 max-h-[80vh] overflow-hidden">
+    <div className="fixed top-4 right-4 z-50 w-96 md:w-[30rem] max-h-[80vh] overflow-hidden">
       <div className="bg-card/95 backdrop-blur-sm border rounded-lg shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between p-3 border-b bg-card/50">

@@ -117,22 +117,22 @@ export const useTravelRecommendations = () => {
 
   const findOptimalDepartureWindow = useCallback((
     routeCoordinates: [number, number][],
-    currentTime: Date,
+    baseTime: Date,
     routeDuration: number,
     hourlyForecasts: { [coordinate: string]: { [hour: number]: any } }
   ): TravelWindow[] => {
     const windows: TravelWindow[] = [];
     
-    // Check departure times in 15-minute intervals over the next hour
-    for (let minutes = 0; minutes <= 60; minutes += 15) {
-      const departureTime = new Date(currentTime.getTime() + minutes * 60 * 1000);
+    // Generate windows 1 hour before and after the selected time in 15-minute intervals
+    for (let minutes = -60; minutes <= 60; minutes += 15) {
+      const departureTime = new Date(baseTime.getTime() + minutes * 60 * 1000);
       const window = calculateTravelWindow(routeCoordinates, departureTime, routeDuration, hourlyForecasts);
       windows.push(window);
     }
 
     // Sort by risk level and total rain encounter
     return windows.sort((a, b) => {
-      const riskOrder = { 'low': 0, 'medium': 1, 'high': 2 };
+      const riskOrder = { 'low': 0, 'medium': 1, 'high': 2 } as const;
       if (riskOrder[a.riskLevel] !== riskOrder[b.riskLevel]) {
         return riskOrder[a.riskLevel] - riskOrder[b.riskLevel];
       }
@@ -202,58 +202,80 @@ export const useTravelRecommendations = () => {
   const generateRecommendation = useCallback(async (
     routeCoordinates: [number, number][],
     routeDuration: number,
-    hourlyForecasts: { [coordinate: string]: { [timeKey: number]: any } }
+    hourlyForecasts: { [coordinate: string]: { [timeKey: number]: any } },
+    baseDepartureTime: Date
   ): Promise<TravelRecommendation> => {
     setLoading(true);
 
     try {
-      const currentTime = new Date();
+      const baseTime = baseDepartureTime;
       const isShortTrip = routeDuration <= 7200; // 2 hours or less
       
-      let windows: TravelWindow[];
+      let windows: TravelWindow[] = [];
       
       if (isShortTrip) {
-        // Use AccuWeather MinuteCast for short trips (API key is embedded)
+        // Use AccuWeather MinuteCast for short trips (minute-level)
         console.log('Using AccuWeather MinuteCast for short trip');
-        windows = await generateAccuWeatherWindows(routeCoordinates, currentTime, routeDuration);
+        windows = await generateAccuWeatherWindows(routeCoordinates, baseTime, routeDuration);
       } else {
-        // Use OpenWeatherMap for longer trips
+        // Use OpenWeatherMap for longer trips (hourly)
         console.log('Using OpenWeatherMap for trip');
-        windows = findOptimalDepartureWindow(routeCoordinates, currentTime, routeDuration, hourlyForecasts);
+        windows = findOptimalDepartureWindow(routeCoordinates, baseTime, routeDuration, hourlyForecasts);
       }
-      const bestWindow = windows[0];
-      const currentWindow = isShortTrip 
-        ? await calculateAccuWeatherWindow(routeCoordinates, currentTime, routeDuration)
-        : calculateTravelWindow(routeCoordinates, currentTime, routeDuration, hourlyForecasts);
 
-      // Analyze weather improvement
-      const currentHour = currentTime.getHours();
+      // Identify best, current-at-selected, and trend
+      const bestWindow = windows[0];
+      const currentAtSelected = isShortTrip 
+        ? await calculateAccuWeatherWindow(routeCoordinates, baseTime, routeDuration)
+        : calculateTravelWindow(routeCoordinates, baseTime, routeDuration, hourlyForecasts);
+
+      // Analyze weather improvement around the selected time
+      const currentHour = baseTime.getHours();
       const improvement = analyzeWeatherImprovement(hourlyForecasts, currentHour);
 
-      // Determine if should wait
-      const shouldWait = currentWindow.riskLevel === 'high' && bestWindow.riskLevel !== 'high';
-      
+      // Determine if leaving ASAP is advisable vs waiting or leaving earlier than selected
+      const beforeWindows = windows.filter(w => w.departureTime <= baseTime);
+      const afterWindows = windows.filter(w => w.departureTime > baseTime);
+
+      const minBeforeRisk = beforeWindows.length ? Math.min(...beforeWindows.map(w => ({low:0,medium:1,high:2} as const)[w.riskLevel])) : Infinity;
+      const minAfterRisk = afterWindows.length ? Math.min(...afterWindows.map(w => ({low:0,medium:1,high:2} as const)[w.riskLevel])) : Infinity;
+
+      let shouldWait = false;
       let reason = '';
-      if (shouldWait) {
-        reason = `Current conditions pose high risk. Better to depart ${bestWindow.departureTime > currentTime ? 'in ' + Math.round((bestWindow.departureTime.getTime() - currentTime.getTime()) / 60000) + ' minutes' : 'now'}`;
-      } else if (currentWindow.riskLevel === 'low') {
-        reason = 'Current conditions are favorable for travel';
+
+      if (minAfterRisk > ({low:0,medium:1,high:2} as const)[currentAtSelected.riskLevel]) {
+        // Conditions worsen after selected time
+        reason = 'Weather is expected to worsen after the selected time — consider leaving as soon as possible.';
+        shouldWait = false;
+      } else if (minBeforeRisk < ({low:0,medium:1,high:2} as const)[currentAtSelected.riskLevel]) {
+        // Better window exists before the selected time
+        reason = 'An earlier departure could help you avoid worse weather conditions.';
+        shouldWait = false;
       } else {
-        reason = 'Conditions are acceptable, but monitor weather closely';
+        // Decide based on best window vs current-at-selected
+        shouldWait = currentAtSelected.riskLevel === 'high' && bestWindow.riskLevel !== 'high' && bestWindow.departureTime > baseTime;
+        if (shouldWait) {
+          const mins = Math.round((bestWindow.departureTime.getTime() - baseTime.getTime()) / 60000);
+          reason = `Current conditions pose high risk. Better to depart in about ${mins} minutes.`;
+        } else if (currentAtSelected.riskLevel === 'low') {
+          reason = 'Conditions at your selected time look favorable.';
+        } else {
+          reason = 'Conditions are acceptable, but monitor weather closely.';
+        }
       }
 
       const recommendation: TravelRecommendation = {
         shouldWait,
         reason,
         bestDepartureTime: bestWindow.departureTime,
-        alternativeWindows: windows.slice(0, 4),
+        alternativeWindows: windows,
         currentConditions: {
-          riskLevel: currentWindow.riskLevel,
-          message: currentWindow.riskLevel === 'high' 
-            ? `High rain risk: ${currentWindow.maxRainIntensity.toFixed(1)}mm/h expected`
-            : currentWindow.riskLevel === 'medium'
-            ? `Moderate rain risk: ${currentWindow.maxRainIntensity.toFixed(1)}mm/h expected`
-            : `Low rain risk: ${currentWindow.maxRainIntensity.toFixed(1)}mm/h expected`
+          riskLevel: currentAtSelected.riskLevel,
+          message: currentAtSelected.riskLevel === 'high' 
+            ? `High rain risk: ${currentAtSelected.maxRainIntensity.toFixed(1)}mm/h expected`
+            : currentAtSelected.riskLevel === 'medium'
+            ? `Moderate rain risk: ${currentAtSelected.maxRainIntensity.toFixed(1)}mm/h expected`
+            : `Low rain risk: ${currentAtSelected.maxRainIntensity.toFixed(1)}mm/h expected`
         },
         improvementForecast: improvement
       };
@@ -268,18 +290,18 @@ export const useTravelRecommendations = () => {
 
   const generateAccuWeatherWindows = useCallback(async (
     routeCoordinates: [number, number][],
-    currentTime: Date,
+    baseTime: Date,
     routeDuration: number
   ): Promise<TravelWindow[]> => {
     const windows: TravelWindow[] = [];
     
     try {
-      // Get MinuteCast data for the route
-      const minutecastForecasts = await getMinuteCastForRoute(routeCoordinates, currentTime, routeDuration);
+      // Get MinuteCast data for the route centered around the selected time
+      const minutecastForecasts = await getMinuteCastForRoute(routeCoordinates, baseTime, routeDuration);
       
-      // Check departure times in 5-minute intervals over the next hour
-      for (let minutes = 0; minutes <= 60; minutes += 5) {
-        const departureTime = new Date(currentTime.getTime() + minutes * 60 * 1000);
+      // Generate windows 1 hour before and after in 15-minute intervals
+      for (let minutes = -60; minutes <= 60; minutes += 15) {
+        const departureTime = new Date(baseTime.getTime() + minutes * 60 * 1000);
         const window = await calculateAccuWeatherWindow(routeCoordinates, departureTime, routeDuration, minutecastForecasts);
         windows.push(window);
       }
@@ -290,7 +312,7 @@ export const useTravelRecommendations = () => {
 
     // Sort by risk level and total rain encounter
     return windows.sort((a, b) => {
-      const riskOrder = { 'low': 0, 'medium': 1, 'high': 2 };
+      const riskOrder = { 'low': 0, 'medium': 1, 'high': 2 } as const;
       if (riskOrder[a.riskLevel] !== riskOrder[b.riskLevel]) {
         return riskOrder[a.riskLevel] - riskOrder[b.riskLevel];
       }

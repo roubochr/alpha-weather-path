@@ -314,13 +314,13 @@ const WeatherMap = () => {
       
       // Find exact coordinates in route for smooth path following
       const segmentCoords = [];
-      const startIdx = coordinates.findIndex(coord => 
-        Math.abs(coord[0] - segment.coordinate[0]) < 0.01 && 
-        Math.abs(coord[1] - segment.coordinate[1]) < 0.01
+       const startIdx = coordinates.findIndex(coord => 
+        Math.abs(coord[0] - segment.coordinate[0]) < 0.0005 && 
+        Math.abs(coord[1] - segment.coordinate[1]) < 0.0005
       );
       const endIdx = coordinates.findIndex(coord => 
-        Math.abs(coord[0] - nextSegment.coordinate[0]) < 0.01 && 
-        Math.abs(coord[1] - nextSegment.coordinate[1]) < 0.01
+        Math.abs(coord[0] - nextSegment.coordinate[0]) < 0.0005 && 
+        Math.abs(coord[1] - nextSegment.coordinate[1]) < 0.0005
       );
       
       if (startIdx !== -1 && endIdx !== -1) {
@@ -566,7 +566,7 @@ const WeatherMap = () => {
         
         // Set high z-index for marker visibility
         const markerEl = marker.getElement();
-        markerEl.style.zIndex = '1000';
+        markerEl.style.zIndex = '30';
         
         marker.addTo(map.current!);
       }
@@ -939,14 +939,15 @@ const WeatherMap = () => {
             setRouteHourlyForecasts(forecasts);
             
             // Generate travel recommendations
-            try {
-              const recommendation = await generateRecommendation(
-                currentRoute.geometry.coordinates,
-                currentRoute.duration,
-                forecasts
-              );
-              setTravelRecommendation(recommendation);
-            } catch (error) {
+              try {
+                const recommendation = await generateRecommendation(
+                  currentRoute.geometry.coordinates,
+                  currentRoute.duration,
+                  forecasts,
+                  departureTime
+                );
+                setTravelRecommendation(recommendation);
+              } catch (error) {
               console.error('Error generating travel recommendations:', error);
             }
           }
@@ -1001,7 +1002,7 @@ const WeatherMap = () => {
         font-size: 16px;
         font-weight: bold;
         color: white;
-        z-index: 10000 !important;
+        z-index: 40;
         position: relative;
       `;
       markerElement.innerHTML = '🚀';
@@ -1049,7 +1050,7 @@ const WeatherMap = () => {
         font-size: 16px;
         font-weight: bold;
         color: white;
-        z-index: 10000 !important;
+        z-index: 40;
         position: relative;
       `;
       markerElement.innerHTML = '🏁';
@@ -1094,7 +1095,7 @@ const WeatherMap = () => {
         font-size: 16px;
         font-weight: bold;
         color: white;
-        z-index: 10000 !important;
+        z-index: 40;
         position: relative;
       `;
       markerElement.innerHTML = routePoints.length.toString();
