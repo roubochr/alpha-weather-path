@@ -1217,11 +1217,15 @@ const WeatherMap = () => {
             onDepartureTimeChange={(newTime) => {
               setDepartureTime(newTime);
               setHasTimeUpdates(true);
+              // Clear recommendations to force regeneration on update
+              setTravelRecommendation(null);
             }}
             hasUpdates={hasTimeUpdates}
             onUpdate={() => {
               setHasTimeUpdates(false);
-              // Trigger re-fetch by clearing and setting the route data
+              // Clear travel recommendation to force regeneration
+              setTravelRecommendation(null);
+              // Trigger re-fetch by regenerating the route with new departure time
               if (currentRoute && routePoints.length >= 2) {
                 generateRoute(routePoints);
               }
