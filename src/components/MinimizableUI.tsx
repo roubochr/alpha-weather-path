@@ -126,7 +126,7 @@ const MinimizableUI: React.FC<MinimizableUIProps> = ({
         </div>
 
         {/* Content */}
-        <div className="p-3 max-h-[60vh] overflow-visible">
+        <div className="p-3">
           {activeTab === 'controls' && (
             <div className="space-y-4">
               <TimeControls
