@@ -77,7 +77,7 @@ const MinimizableUI: React.FC<MinimizableUIProps> = ({
   }
 
   return (
-    <div className="fixed top-4 right-4 z-50 w-80 max-h-[80vh] overflow-hidden">
+    <div className="fixed top-4 right-4 z-50 w-80 max-h-[80vh] overflow-visible">
       <div className="bg-card/95 backdrop-blur-sm border rounded-lg shadow-xl">
         {/* Header */}
         <div className="flex items-center justify-between p-3 border-b bg-card/50">
@@ -126,7 +126,7 @@ const MinimizableUI: React.FC<MinimizableUIProps> = ({
         </div>
 
         {/* Content */}
-        <div className="p-3 max-h-[60vh] overflow-y-auto">
+        <div className="p-3 max-h-[60vh] overflow-visible">
           {activeTab === 'controls' && (
             <div className="space-y-4">
               <TimeControls
