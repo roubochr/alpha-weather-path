@@ -26,6 +26,8 @@ interface MinimizableUIProps {
   onClearRoute: () => void;
   routePoints: any[];
   onApiSetup: () => void;
+  hasUpdates?: boolean;
+  onUpdate?: () => void;
 }
 
 const MinimizableUI: React.FC<MinimizableUIProps> = ({
@@ -47,7 +49,9 @@ const MinimizableUI: React.FC<MinimizableUIProps> = ({
   arrivalTime,
   onClearRoute,
   routePoints,
-  onApiSetup
+  onApiSetup,
+  hasUpdates,
+  onUpdate
 }) => {
   const [isMinimized, setIsMinimized] = useState(false);
   const [activeTab, setActiveTab] = useState<'controls' | 'search' | 'weather' | 'settings'>('controls');
@@ -132,6 +136,8 @@ const MinimizableUI: React.FC<MinimizableUIProps> = ({
                 onToggleAnimation={onToggleAnimation}
                 departureTime={departureTime}
                 onDepartureTimeChange={onDepartureTimeChange}
+                hasUpdates={hasUpdates}
+                onUpdate={onUpdate}
               />
               
               <OverlayControls

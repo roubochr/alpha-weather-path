@@ -72,6 +72,7 @@ const WeatherMap = () => {
   const [showLocationDialog, setShowLocationDialog] = useState(false);
   const [showRouteInfo, setShowRouteInfo] = useState(true);
   const [routeInfoTimer, setRouteInfoTimer] = useState<NodeJS.Timeout | null>(null);
+  const [hasTimeUpdates, setHasTimeUpdates] = useState(false);
   
   // Overlay control state
   const [showPrecipitation, setShowPrecipitation] = useState(true);
@@ -1212,7 +1213,18 @@ const WeatherMap = () => {
             onHourChange={setCurrentHour}
             onToggleAnimation={() => setIsAnimating(!isAnimating)}
             departureTime={departureTime}
-            onDepartureTimeChange={setDepartureTime}
+            onDepartureTimeChange={(newTime) => {
+              setDepartureTime(newTime);
+              setHasTimeUpdates(true);
+            }}
+            hasUpdates={hasTimeUpdates}
+            onUpdate={() => {
+              setHasTimeUpdates(false);
+              // Trigger re-fetch by clearing and setting the route data
+              if (currentRoute && routePoints.length >= 2) {
+                generateRoute(routePoints);
+              }
+            }}
             showPrecipitation={showPrecipitation}
             showClouds={showClouds}
             onTogglePrecipitation={setShowPrecipitation}
@@ -1248,7 +1260,7 @@ const WeatherMap = () => {
             </div>
           )}
           
-          <div className="absolute bottom-4 right-4 z-10 space-y-3">
+          <div className="absolute bottom-4 left-4 z-10 space-y-3">
             <Button
               onClick={() => setupUserLocation(true)}
               size="sm"
@@ -1258,13 +1270,16 @@ const WeatherMap = () => {
             >
               <MapPin className="w-4 h-4" />
             </Button>
+          </div>
+          
+          <div className="absolute bottom-4 right-4 z-10">
             <WeatherLegend />
           </div>
         </>
       )}
       
       {routePoints.length > 0 && showRouteInfo && (
-        <div className="absolute bottom-4 left-4 z-10 bg-card/95 backdrop-blur-sm border rounded-lg p-3 shadow-lg transition-all duration-300">
+        <div className="absolute bottom-20 left-4 z-10 bg-card/95 backdrop-blur-sm border rounded-lg p-3 shadow-lg transition-all duration-300">
           <div className="text-sm font-medium mb-1">
             Route: {routePoints.length} point{routePoints.length !== 1 ? 's' : ''}
           </div>

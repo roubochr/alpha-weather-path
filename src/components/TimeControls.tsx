@@ -12,6 +12,8 @@ interface TimeControlsProps {
   onToggleAnimation: () => void;
   departureTime: Date;
   onDepartureTimeChange: (time: Date) => void;
+  hasUpdates?: boolean;
+  onUpdate?: () => void;
 }
 
 const TimeControls: React.FC<TimeControlsProps> = ({
@@ -20,7 +22,9 @@ const TimeControls: React.FC<TimeControlsProps> = ({
   onHourChange,
   onToggleAnimation,
   departureTime,
-  onDepartureTimeChange
+  onDepartureTimeChange,
+  hasUpdates = false,
+  onUpdate
 }) => {
   const formatHour = (hour: number): string => {
     const date = new Date();
@@ -152,6 +156,19 @@ const TimeControls: React.FC<TimeControlsProps> = ({
               Next Week
             </Button>
           </div>
+          
+          {hasUpdates && onUpdate && (
+            <div className="pt-3 border-t border-border">
+              <Button
+                size="sm"
+                onClick={onUpdate}
+                className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                <Clock className="h-3 w-3 mr-2" />
+                Update Weather & Recommendations
+              </Button>
+            </div>
+          )}
         </div>
       </div>
     </Card>
