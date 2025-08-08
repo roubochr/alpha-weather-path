@@ -4,13 +4,14 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { Alert, AlertDescription } from './ui/alert';
-import { Check, AlertCircle, ExternalLink } from 'lucide-react';
+import { Check, AlertCircle, ExternalLink, X } from 'lucide-react';
 
 interface AccuWeatherSetupProps {
   onApiKeySet: () => void;
+  onClose?: () => void;
 }
 
-const AccuWeatherSetup: React.FC<AccuWeatherSetupProps> = ({ onApiKeySet }) => {
+const AccuWeatherSetup: React.FC<AccuWeatherSetupProps> = ({ onApiKeySet, onClose }) => {
   const [apiKey, setApiKey] = useState('');
   const [isValid, setIsValid] = useState(false);
   const [isValidating, setIsValidating] = useState(false);
@@ -75,9 +76,19 @@ const AccuWeatherSetup: React.FC<AccuWeatherSetupProps> = ({ onApiKeySet }) => {
 
   if (isValid) {
     return (
-      <Card>
+      <Card className="relative">
+        {onClose && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onClose}
+            className="absolute top-2 right-2 h-8 w-8 p-0"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        )}
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
+          <CardTitle className="flex items-center gap-2 pr-8">
             <Check className="w-5 h-5 text-green-500" />
             AccuWeather API Connected
           </CardTitle>
@@ -95,9 +106,19 @@ const AccuWeatherSetup: React.FC<AccuWeatherSetupProps> = ({ onApiKeySet }) => {
   }
 
   return (
-    <Card>
+    <Card className="relative">
+      {onClose && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onClose}
+          className="absolute top-2 right-2 h-8 w-8 p-0"
+        >
+          <X className="h-4 w-4" />
+        </Button>
+      )}
       <CardHeader>
-        <CardTitle className="flex items-center gap-2">
+        <CardTitle className="flex items-center gap-2 pr-8">
           <AlertCircle className="w-5 h-5 text-yellow-500" />
           AccuWeather MinuteCast Setup
         </CardTitle>

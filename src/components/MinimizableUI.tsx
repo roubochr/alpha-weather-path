@@ -15,8 +15,12 @@ interface MinimizableUIProps {
   onDepartureTimeChange: (time: Date) => void;
   showPrecipitation: boolean;
   showClouds: boolean;
+  precipitationOpacity: number;
+  cloudOpacity: number;
   onTogglePrecipitation: (show: boolean) => void;
   onToggleClouds: (show: boolean) => void;
+  onPrecipitationOpacityChange: (opacity: number) => void;
+  onCloudOpacityChange: (opacity: number) => void;
   mapboxToken: string;
   onLocationSelect: (lng: number, lat: number, placeName: string) => void;
   onStartNavigation: () => void;
@@ -39,8 +43,12 @@ const MinimizableUI: React.FC<MinimizableUIProps> = ({
   onDepartureTimeChange,
   showPrecipitation,
   showClouds,
+  precipitationOpacity,
+  cloudOpacity,
   onTogglePrecipitation,
   onToggleClouds,
+  onPrecipitationOpacityChange,
+  onCloudOpacityChange,
   mapboxToken,
   onLocationSelect,
   onStartNavigation,
@@ -143,8 +151,12 @@ const MinimizableUI: React.FC<MinimizableUIProps> = ({
               <OverlayControls
                 showPrecipitation={showPrecipitation}
                 showClouds={showClouds}
+                precipitationOpacity={precipitationOpacity}
+                cloudOpacity={cloudOpacity}
                 onTogglePrecipitation={onTogglePrecipitation}
                 onToggleClouds={onToggleClouds}
+                onPrecipitationOpacityChange={onPrecipitationOpacityChange}
+                onCloudOpacityChange={onCloudOpacityChange}
               />
 
               {/* Enhanced departure time controls */}

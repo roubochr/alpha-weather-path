@@ -25,6 +25,22 @@ const TravelRecommendations: React.FC<TravelRecommendationsProps> = ({
   loading,
   onSelectDeparture
 }) => {
+  // Debug logging to check if wind data is present
+  React.useEffect(() => {
+    if (recommendation && recommendation.alternativeWindows.length > 0) {
+      const firstWindow = recommendation.alternativeWindows[0];
+      console.log('TravelRecommendations - First window data:', firstWindow);
+      console.log('TravelRecommendations - Properties check:', {
+        hasMaxWindSpeed: 'maxWindSpeed' in firstWindow,
+        hasMaxRainIntensity: 'maxRainIntensity' in firstWindow,
+        hasPrimaryRiskFactor: 'primaryRiskFactor' in firstWindow,
+        maxWindSpeed: firstWindow.maxWindSpeed,
+        maxRainIntensity: firstWindow.maxRainIntensity,
+        primaryRiskFactor: firstWindow.primaryRiskFactor,
+        riskLevel: firstWindow.riskLevel
+      });
+    }
+  }, [recommendation]);
   if (loading) {
     return (
       <Card className="w-full">
@@ -136,29 +152,49 @@ const TravelRecommendations: React.FC<TravelRecommendationsProps> = ({
         <div className="space-y-3">
           <h4 className="font-semibold text-sm">Departure Time Options</h4>
           <div className="space-y-2">
-            {recommendation.alternativeWindows.map((window, index) => (
-              <div key={index} className="flex items-center justify-between p-3 border rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className="text-center">
+            {recommendation.alternativeWindows
+              .filter(window => {
+                const minutesFromNow = getMinutesFromNow(window.departureTime);
+                return minutesFromNow >= -5; // Show times up to 5 minutes in the past
+              })
+              .map((window, index) => (
+              <div key={index} className="flex items-center justify-between p-3 border rounded-lg min-w-0">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="text-center flex-shrink-0">
                     <div className="text-sm font-medium">
                       {formatTime(window.departureTime)}
                     </div>
                     <div className="text-xs text-muted-foreground">
                       {getMinutesFromNow(window.departureTime) === 0 
                         ? 'Now' 
+                        : getMinutesFromNow(window.departureTime) < 0
+                        ? `${Math.abs(getMinutesFromNow(window.departureTime))}m ago`
                         : `${getMinutesFromNow(window.departureTime)}m`
                       }
                     </div>
                   </div>
-                  <div className="flex flex-col gap-1">
+                  <div className="flex flex-col gap-1 min-w-0">
                     <Badge 
                       variant="outline" 
-                      className={`text-xs ${getRiskColor(window.riskLevel)}`}
+                      className={`text-[10px] px-1.5 py-0.5 ${getRiskColor(window.riskLevel)} whitespace-nowrap`}
                     >
-                      {window.riskLevel.toUpperCase()} RISK
+                      {window.riskLevel.toUpperCase()}
                     </Badge>
                     <div className="text-xs text-muted-foreground">
-                      Max: {window.maxRainIntensity.toFixed(1)}mm/h
+                      <div className="truncate">
+                        {(window.primaryRiskFactor === 'wind' && window.maxWindSpeed !== undefined) ? (
+                          `Wind: ${window.maxWindSpeed.toFixed(0)}km/h`
+                        ) : (window.primaryRiskFactor === 'combined' && window.maxWindSpeed !== undefined) ? (
+                          `${window.maxRainIntensity.toFixed(1)}mm/h + ${window.maxWindSpeed.toFixed(0)}km/h`
+                        ) : (
+                          `Rain: ${window.maxRainIntensity.toFixed(1)}mm/h`
+                        )}
+                      </div>
+                      {window.maxWindSpeed !== undefined && window.primaryRiskFactor !== 'wind' && window.primaryRiskFactor !== 'combined' && (
+                        <div className="text-[11px] text-gray-400 truncate">
+                          Wind: {window.maxWindSpeed.toFixed(0)}km/h
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -166,7 +202,8 @@ const TravelRecommendations: React.FC<TravelRecommendationsProps> = ({
                   size="sm"
                   variant={index === 0 ? "default" : "outline"}
                   onClick={() => onSelectDeparture(window.departureTime)}
-                  className="text-xs"
+                  className="text-xs flex-shrink-0 ml-2"
+                  disabled={getMinutesFromNow(window.departureTime) < -5}
                 >
                   {index === 0 ? 'Best' : 'Select'}
                 </Button>

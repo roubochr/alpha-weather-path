@@ -4,7 +4,7 @@ import { WeatherData, ForecastData } from './useWeatherAPI';
 export interface TimeBasedWeatherData {
   current: WeatherData;
   forecast: ForecastData[];
-  hourlyForecast: { [hour: number]: WeatherData };
+  hourlyForecast: { [minute: number]: WeatherData };
 }
 
 export const useTimeBasedWeather = () => {
@@ -47,30 +47,118 @@ export const useTimeBasedWeather = () => {
       
       const forecastData = await forecastResponse.json();
       
-      // Create hourly forecast map for next 48 hours
-      const hourlyForecast: { [hour: number]: WeatherData } = {};
+      // Create minute-level forecast map for next 48 hours (for 15-minute intervals)
+      const hourlyForecast: { [minute: number]: WeatherData } = {};
       const now = new Date();
       
-      // Process forecast data to create timestamped predictions
-      forecastData.list.forEach((item: any, index: number) => {
+      console.log('Generating minute-level forecasts...');
+      
+      // Process forecast data to create timestamped predictions with interpolation
+      for (let index = 0; index < forecastData.list.length; index++) {
+        const item = forecastData.list[index];
+        const nextItem = forecastData.list[index + 1];
         const forecastTime = new Date(item.dt * 1000);
-        const timeKey = Math.floor(forecastTime.getTime() / (3600 * 1000)); // Hour timestamp key
         
-        // Include up to 5 days (120 hours) of forecast data
-        if (forecastTime.getTime() <= now.getTime() + 120 * 60 * 60 * 1000) {
-          hourlyForecast[timeKey] = {
-            temperature: Math.round(item.main.temp),
-            humidity: item.main.humidity,
-            precipitation: item.rain?.['3h'] || 0,
-            condition: item.weather[0].main,
-            description: item.weather[0].description,
-            windSpeed: Math.round(item.wind.speed * 3.6),
-            pressure: item.main.pressure,
-            visibility: 10, // Default visibility for forecast
-            icon: item.weather[0].icon
-          };
+        // Extract precipitation data - try different formats and convert to hourly rate
+        let currentPrecipitation = 0;
+        if (item.rain) {
+          if (item.rain['3h']) {
+            currentPrecipitation = item.rain['3h'] / 3; // Convert 3-hour total to hourly rate
+          } else if (item.rain['1h']) {
+            currentPrecipitation = item.rain['1h']; // Already hourly rate
+          } else if (item.rain['1']) {
+            currentPrecipitation = item.rain['1']; // Assume hourly rate
+          }
+        } else if (item.snow) {
+          if (item.snow['3h']) {
+            currentPrecipitation = (item.snow['3h'] / 3) * 0.1; // Convert 3-hour total to hourly rate
+          } else if (item.snow['1h']) {
+            currentPrecipitation = item.snow['1h'] * 0.1; // Already hourly rate
+          } else if (item.snow['1']) {
+            currentPrecipitation = item.snow['1'] * 0.1; // Assume hourly rate
+          }
         }
-      });
+        
+        // Extract next precipitation for interpolation
+        let nextPrecipitation = currentPrecipitation; // Default to current if no next item
+        if (nextItem) {
+          if (nextItem.rain) {
+            if (nextItem.rain['3h']) {
+              nextPrecipitation = nextItem.rain['3h'] / 3;
+            } else if (nextItem.rain['1h']) {
+              nextPrecipitation = nextItem.rain['1h'];
+            } else if (nextItem.rain['1']) {
+              nextPrecipitation = nextItem.rain['1'];
+            }
+          } else if (nextItem.snow) {
+            if (nextItem.snow['3h']) {
+              nextPrecipitation = (nextItem.snow['3h'] / 3) * 0.1;
+            } else if (nextItem.snow['1h']) {
+              nextPrecipitation = nextItem.snow['1h'] * 0.1;
+            } else if (nextItem.snow['1']) {
+              nextPrecipitation = nextItem.snow['1'] * 0.1;
+            }
+          }
+        }
+        
+        console.log(`Processing forecast ${index}: ${forecastTime.toLocaleString()}, Current rain/h: ${currentPrecipitation.toFixed(2)}mm, Next rain/h: ${nextPrecipitation.toFixed(2)}mm`);
+        
+        // Create interpolated minute-level entries for the next 3 hours (or until next forecast)
+        const hoursToNextForecast = nextItem ? 3 : 1; // 3 hours between forecasts, or 1 if last item
+        const totalMinutes = hoursToNextForecast * 60;
+        
+        for (let minute = 0; minute < totalMinutes; minute += 15) {
+          const minuteTime = new Date(forecastTime.getTime() + minute * 60 * 1000);
+          const minuteKey = Math.floor(minuteTime.getTime() / (60 * 1000));
+          
+          // Include up to 5 days (120 hours) of forecast data
+          if (minuteTime.getTime() <= now.getTime() + 120 * 60 * 60 * 1000) {
+            // Interpolate precipitation between current and next forecast
+            const progressRatio = minute / totalMinutes; // 0 to 1 over the forecast period
+            let precipitation = currentPrecipitation + (nextPrecipitation - currentPrecipitation) * progressRatio;
+            
+            // Add some realistic variation within the 3-hour window (reduced multiplier)
+            const variationFactor = 0.6 + Math.random() * 0.4; // 0.6 to 1.0 random multiplier
+            precipitation *= variationFactor;
+            
+            // If still 0, check if there's precipitation in the weather condition
+            if (precipitation === 0 && item.weather[0].main.toLowerCase().includes('rain')) {
+              precipitation = 0.1 + Math.random() * 0.2; // 0.1-0.3mm light rain with variation
+            }
+            
+            // Additional check for drizzle or light rain
+            if (precipitation === 0 && (item.weather[0].description.toLowerCase().includes('drizzle') || 
+                                      item.weather[0].description.toLowerCase().includes('light rain'))) {
+              precipitation = 0.05 + Math.random() * 0.15; // 0.05-0.2mm drizzle with variation
+            }
+            
+            // Check for moderate to heavy rain descriptions
+            if (precipitation === 0 && (item.weather[0].description.toLowerCase().includes('moderate rain') ||
+                                      item.weather[0].description.toLowerCase().includes('heavy rain'))) {
+              precipitation = 0.8 + Math.random() * 0.7; // 0.8-1.5mm moderate rain with variation
+            }
+            
+            // Round to reasonable precision
+            precipitation = Math.round(precipitation * 100) / 100;
+            
+            console.log(`Creating forecast for ${minuteTime.toLocaleTimeString()}, Key: ${minuteKey}, Precipitation: ${precipitation}mm/h (interpolated)`);
+            
+            hourlyForecast[minuteKey] = {
+              temperature: Math.round(item.main.temp),
+              humidity: item.main.humidity,
+              precipitation: precipitation,
+              condition: item.weather[0].main,
+              description: item.weather[0].description,
+              windSpeed: Math.round(item.wind.speed * 3.6),
+              pressure: item.main.pressure,
+              visibility: 10, // Default visibility for forecast
+              icon: item.weather[0].icon
+            };
+          }
+        }
+      }
+      
+      console.log(`Generated ${Object.keys(hourlyForecast).length} minute-level forecast entries`);
 
       const result: TimeBasedWeatherData = {
         current: {
@@ -110,15 +198,15 @@ export const useTimeBasedWeather = () => {
     hourlyForecast: { [timeKey: number]: WeatherData },
     targetTime: Date
   ): WeatherData | null => {
-    const timeKey = Math.floor(targetTime.getTime() / (3600 * 1000));
+    const timeKey = Math.floor(targetTime.getTime() / (60 * 1000)); // Minute timestamp key
     
     // Try exact match first
     if (hourlyForecast[timeKey]) {
       return hourlyForecast[timeKey];
     }
     
-    // Try to find closest forecast within 3 hours
-    for (let offset = 1; offset <= 3; offset++) {
+    // Try to find closest forecast within 15 minutes
+    for (let offset = 1; offset <= 15; offset++) {
       if (hourlyForecast[timeKey - offset]) {
         return hourlyForecast[timeKey - offset];
       }
@@ -160,63 +248,63 @@ export const useTimeBasedWeather = () => {
       const roundedLat = Math.round(coord[1] * 1000) / 1000;
       const roundedLon = Math.round(coord[0] * 1000) / 1000;
       const coordKey = `${roundedLon},${roundedLat}`;
-      
-      const hourlyForecast = hourlyForecasts[coordKey];
-      
-      if (hourlyForecast) {
-        const weather = getWeatherAtTime(hourlyForecast, arrivalTime);
-        
-        if (weather) {
-          results.push({
-            coordinate: [roundedLon, roundedLat],
-            weather,
-            arrivalTime
-          });
-        }
-      } else {
-        // If no forecast data, try to interpolate from nearby points
-        const nearbyForecasts = Object.entries(hourlyForecasts);
-        if (nearbyForecasts.length > 0) {
-          // Find closest coordinate within reasonable distance (0.1 degrees ~ 11km)
-          let closestForecast = null;
-          let minDistance = Infinity;
-          const maxDistance = 0.1;
-          
-          nearbyForecasts.forEach(([key, forecast]) => {
-            const [lon, lat] = key.split(',').map(Number);
-            const distance = Math.sqrt(
-              Math.pow(lon - roundedLon, 2) + Math.pow(lat - roundedLat, 2)
-            );
-            
-            if (distance < minDistance && distance <= maxDistance) {
-              minDistance = distance;
-              closestForecast = forecast;
-            }
-          });
-          
-          if (closestForecast) {
-            const weather = getWeatherAtTime(closestForecast, arrivalTime);
-            
-            if (weather) {
-              results.push({
-                coordinate: [roundedLon, roundedLat],
-                weather,
-                arrivalTime
-              });
-            }
-          }
-        }
-      }
-    }
-    
-    return results;
-  }, [getWeatherAtTime]);
+       
+       const hourlyForecast = hourlyForecasts[coordKey];
+       
+       if (hourlyForecast) {
+         const weather = getWeatherAtTime(hourlyForecast, arrivalTime);
+         
+         if (weather) {
+           results.push({
+             coordinate: [roundedLon, roundedLat],
+             weather,
+             arrivalTime
+           });
+         }
+       } else {
+         // If no forecast data, try to interpolate from nearby points
+         const nearbyForecasts = Object.entries(hourlyForecasts);
+         if (nearbyForecasts.length > 0) {
+           // Find closest coordinate within reasonable distance (0.1 degrees ~ 11km)
+           let closestForecast = null;
+           let minDistance = Infinity;
+           const maxDistance = 0.1;
+           
+           nearbyForecasts.forEach(([key, forecast]) => {
+             const [lon, lat] = key.split(',').map(Number);
+             const distance = Math.sqrt(
+               Math.pow(lon - roundedLon, 2) + Math.pow(lat - roundedLat, 2)
+             );
+             
+             if (distance < minDistance && distance <= maxDistance) {
+               minDistance = distance;
+               closestForecast = forecast;
+             }
+           });
+           
+           if (closestForecast) {
+             const weather = getWeatherAtTime(closestForecast, arrivalTime);
+             
+             if (weather) {
+               results.push({
+                 coordinate: [roundedLon, roundedLat],
+                 weather,
+                 arrivalTime
+               });
+             }
+           }
+         }
+       }
+     }
+     
+     return results;
+   }, [getWeatherAtTime]);
 
-  return {
-    getTimeBasedWeather,
-    getWeatherAtTime,
-    calculateArrivalWeather,
-    loading,
-    error
-  };
-};
+   return {
+     getTimeBasedWeather,
+     getWeatherAtTime,
+     calculateArrivalWeather,
+     loading,
+     error
+   };
+ };

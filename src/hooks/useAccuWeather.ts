@@ -17,7 +17,10 @@ export const useAccuWeather = () => {
   const [error, setError] = useState<string | null>(null);
 
   const getLocationKey = useCallback(async (lat: number, lon: number): Promise<string | null> => {
-    const apiKey = 'eaHAWeeyy8GBCPwwIGRsjy6yKUmx6hcP';
+    const apiKey = localStorage.getItem('accuweather-api-key');
+    if (!apiKey) {
+      throw new Error('AccuWeather API key not found');
+    }
 
     try {
       const response = await fetch('/functions/v1/accuweather-location', {
@@ -45,7 +48,10 @@ export const useAccuWeather = () => {
     setError(null);
 
     try {
-      const apiKey = 'eaHAWeeyy8GBCPwwIGRsjy6yKUmx6hcP';
+      const apiKey = localStorage.getItem('accuweather-api-key');
+      if (!apiKey) {
+        throw new Error('AccuWeather API key not found');
+      }
 
       // First get the location key
       const locationKey = await getLocationKey(lat, lon);

@@ -17,6 +17,7 @@ import WeatherForecast from '@/components/WeatherForecast';
 import LocationDialog from '@/components/LocationDialog';
 import MinimizableUI from '@/components/MinimizableUI';
 import AccuWeatherSetup from '@/components/AccuWeatherSetup';
+import RouteWarningDialog from '@/components/RouteWarningDialog';
 import TravelRecommendations from '@/components/TravelRecommendations';
 import { useTravelRecommendations, TravelRecommendation } from '@/hooks/useTravelRecommendations';
 import { Toaster } from '@/components/ui/toaster';
@@ -79,13 +80,17 @@ const WeatherMap = () => {
   const [showPrecipitation, setShowPrecipitation] = useState(true);
   const [showClouds, setShowClouds] = useState(true);
   
+  // State for opacity
+  const [precipitationOpacity, setPrecipitationOpacity] = useState(0.7);
+  const [cloudOpacity, setCloudOpacity] = useState(0.4);
+  
   // Weather forecast state
   const [departureWeather, setDepartureWeather] = useState<any>(null);
   const [arrivalWeather, setArrivalWeather] = useState<any>(null);
   
   // Travel recommendations state
   const [travelRecommendation, setTravelRecommendation] = useState<TravelRecommendation | null>(null);
-  const [routeHourlyForecasts, setRouteHourlyForecasts] = useState<{ [coordinate: string]: { [hour: number]: any } }>({});
+  const [routeHourlyForecasts, setRouteHourlyForecasts] = useState<{ [coordinate: string]: { [minute: number]: any } }>({});
   
   // Route weather analysis
   const [routeWeather, setRouteWeather] = useState<Array<{
@@ -96,6 +101,9 @@ const WeatherMap = () => {
   }>>([]);
   const [showApiKeySetup, setShowApiKeySetup] = useState(false);
   const [showAccuWeatherSetup, setShowAccuWeatherSetup] = useState(false);
+  const [showRouteWarning, setShowRouteWarning] = useState(false);
+  const [pendingRoute, setPendingRoute] = useState<RoutePoint[] | null>(null);
+  const [pendingRouteDuration, setPendingRouteDuration] = useState<number>(0);
 
   const { toast } = useToast();
   const { getRoute, loading: routeLoading, error: routeError } = useRouting(mapboxToken);
@@ -573,7 +581,7 @@ const WeatherMap = () => {
     });
   }, [getTimeBasedWeather, getPrecipitationColor]);
 
-  const generateRoute = useCallback(async (routePoints: RoutePoint[]) => {
+  const generateRoute = useCallback(async (routePoints: RoutePoint[], skipWarning: boolean = false) => {
     if (routePoints.length < 2 || !mapboxToken) return;
 
     const coordinates: [number, number][] = routePoints.map(point => [point.lng, point.lat]);
@@ -581,6 +589,18 @@ const WeatherMap = () => {
     // Get route from Mapbox
     const routeData = await getRoute(coordinates);
     if (!routeData) return;
+
+    // Check if route is longer than 2 hours
+    const routeDurationHours = routeData.duration / 3600;
+    const hasAccuWeatherKey = localStorage.getItem('accuweather-api-key');
+    
+    // Show warning dialog for long routes (always show, regardless of AccuWeather availability)
+    if (!skipWarning && routeDurationHours >= 2) {
+      setPendingRoute(routePoints);
+      setPendingRouteDuration(routeData.duration);
+      setShowRouteWarning(true);
+      return; // Don't proceed with route generation until user confirms
+    }
 
     // Generate weather-based route visualization
     await visualizeWeatherRoute(routeData, departureTime);
@@ -638,7 +658,7 @@ const WeatherMap = () => {
     console.log('Adding weather layer...');
     
     // Function to update weather layer based on current hour and overlay settings
-    const updateWeatherLayer = (hour: number, precipitation: boolean, clouds: boolean) => {
+    const updateWeatherLayer = (hour: number, precipitation: boolean, clouds: boolean, precipOpacity?: number, cloudOpacity?: number) => {
       if (!map.current || !map.current.isStyleLoaded()) {
         console.log('Map style not loaded yet, skipping weather layer update');
         return;
@@ -647,60 +667,150 @@ const WeatherMap = () => {
       console.log('Updating weather layer for hour:', hour, 'precipitation:', precipitation, 'clouds:', clouds);
       
       try {
-        // Remove existing weather layers
+        // Remove existing weather layers (but keep sources for caching)
         ['weather-precipitation', 'weather-clouds'].forEach(layerId => {
           if (map.current!.getLayer(layerId)) {
             map.current!.removeLayer(layerId);
           }
         });
         
-        ['precipitation-tiles', 'cloud-tiles'].forEach(sourceId => {
-          if (map.current!.getSource(sourceId)) {
-            map.current!.removeSource(sourceId);
-          }
-        });
+        // Only remove sources if they won't be used (for caching efficiency)
+        if (!precipitation && map.current!.getSource('precipitation-tiles')) {
+          map.current!.removeSource('precipitation-tiles');
+        }
+        if (!clouds && map.current!.getSource('cloud-tiles')) {
+          map.current!.removeSource('cloud-tiles');
+        }
+
+        // Calculate average precipitation intensity for dynamic opacity
+        let avgPrecipitation = 0;
+        let dataPoints = 0;
+        
+        if (routeWeather.length > 0) {
+          routeWeather.forEach(segment => {
+            if (segment.weather && segment.weather.precipitation !== undefined) {
+              avgPrecipitation += segment.weather.precipitation;
+              dataPoints++;
+            }
+          });
+          avgPrecipitation = dataPoints > 0 ? avgPrecipitation / dataPoints : 0;
+        }
 
         // Add precipitation layer if enabled
         if (precipitation) {
-          map.current.addSource('precipitation-tiles', {
-            type: 'raster',
-            tiles: [
-              `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=ba3708802ed7275ee958045d0a9a0f99`
-            ],
-            tileSize: 256,
-            minzoom: 0,
-            maxzoom: 18
-          });
+          const apiKey = localStorage.getItem('openweather-api-key') || 'ba3708802ed7275ee958045d0a9a0f99';
+          
+          // Check if source already exists to avoid recreating and enable caching
+          if (!map.current.getSource('precipitation-tiles')) {
+            // Note: OpenWeather radar tiles only show current conditions, not historical/future
+            // For time-based visualization, we adjust opacity and effects based on forecast data
+            map.current.addSource('precipitation-tiles', {
+              type: 'raster',
+              tiles: [
+                `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${apiKey}`
+              ],
+              tileSize: 256,
+              minzoom: 0,
+              maxzoom: 18,
+              scheme: 'xyz'
+            });
+          }
+
+          // Enhanced opacity calculation with over-saturation effect and time-based adjustment
+          const baseOpacity = precipOpacity ?? 0.7;
+          const intensityMultiplier = Math.min(avgPrecipitation / 2.0, 1.0); // Normalize to 0-1
+          
+          // Add time-based visibility factor (fade radar when forecast shows no precipitation)
+          const currentTime = new Date().getHours();
+          const timeDiff = Math.abs(hour - currentTime);
+          const timeAdjustment = avgPrecipitation > 0 ? 1.0 : Math.max(0.3, 1.0 - (timeDiff * 0.1)); // Fade for future times with no forecast rain
+          
+          console.log(`Debug precipitation - baseOpacity: ${baseOpacity}, avgPrecipitation: ${avgPrecipitation}, intensityMultiplier: ${intensityMultiplier}, timeAdjustment: ${timeAdjustment}, selectedHour: ${hour}, currentHour: ${currentTime}`);
+          
+          let dynamicOpacity;
+          let isOverSaturated = false;
+          
+          if (baseOpacity <= 0.8) {
+            // Normal opacity control (0-80%)
+            dynamicOpacity = baseOpacity * (0.3 + intensityMultiplier * 0.7) * timeAdjustment;
+          } else {
+            // Over-saturation effect (80-100%)
+            isOverSaturated = true;
+            const overSaturationFactor = (baseOpacity - 0.8) / 0.2; // 0 to 1 as opacity goes from 80% to 100%
+            const enhancedIntensity = intensityMultiplier + (overSaturationFactor * 0.5); // Boost intensity by up to 50%
+            dynamicOpacity = Math.min(1.0, baseOpacity * (0.3 + enhancedIntensity * 0.7) * timeAdjustment);
+          }
+          
+          // Ensure minimum opacity when precipitation is enabled
+          const minOpacity = 0.1; // Minimum 10% opacity
+          dynamicOpacity = Math.max(dynamicOpacity, minOpacity);
+
+          // Enhanced visual effects for more vibrant precipitation
+          const paintProperties: any = {
+            'raster-opacity': dynamicOpacity,
+            'raster-resampling': 'linear', // Changed to linear for smoother appearance
+            'raster-fade-duration': 300
+          };
+
+                     // Apply enhanced visual effects based on intensity and over-saturation
+           if (isOverSaturated) {
+             // Over-saturation mode: maximum vibrancy within 1.0 limits
+             paintProperties['raster-brightness-min'] = 0.2; // Higher min for more dramatic effect
+             paintProperties['raster-brightness-max'] = 1.0;
+             paintProperties['raster-contrast'] = 1.0; // Maximum allowed contrast
+             paintProperties['raster-saturation'] = 1.0; // Maximum allowed saturation
+             paintProperties['raster-hue-rotate'] = 0; // Ensure blue tones
+           } else if (intensityMultiplier > 0.5) {
+             // High intensity mode: enhanced vibrancy within limits
+             paintProperties['raster-brightness-min'] = 0.15; // Higher min for more pop
+             paintProperties['raster-brightness-max'] = 1.0;
+             paintProperties['raster-contrast'] = 0.9; // High contrast within limits
+             paintProperties['raster-saturation'] = 0.9; // High saturation within limits
+             paintProperties['raster-hue-rotate'] = 0; // Ensure blue tones
+           } else {
+             // Normal mode: moderate enhancement within limits
+             paintProperties['raster-brightness-min'] = 0.1; // Higher min
+             paintProperties['raster-brightness-max'] = 1.0;
+             paintProperties['raster-contrast'] = 0.7; // Moderate contrast within limits
+             paintProperties['raster-saturation'] = 0.8; // Moderate saturation within limits
+             paintProperties['raster-hue-rotate'] = 0; // Ensure blue tones
+           }
 
           map.current.addLayer({
             id: 'weather-precipitation',
             type: 'raster',
             source: 'precipitation-tiles',
-            paint: {
-              'raster-opacity': 0.7,
-              'raster-resampling': 'nearest'
-            }
+            paint: paintProperties
           });
+          
+          const timeStatus = timeDiff === 0 ? 'CURRENT' : timeDiff > 0 ? `FORECAST +${timeDiff}h` : `PAST -${Math.abs(timeDiff)}h`;
+          console.log(`Precipitation overlay updated - Avg intensity: ${avgPrecipitation.toFixed(2)}mm/h, Opacity: ${dynamicOpacity.toFixed(2)}, Time: ${timeStatus}${isOverSaturated ? ' (OVER-SATURATED)' : ''}`);
         }
 
         // Add clouds layer if enabled
         if (clouds) {
-          map.current.addSource('cloud-tiles', {
-            type: 'raster',
-            tiles: [
-              `https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=ba3708802ed7275ee958045d0a9a0f99`
-            ],
-            tileSize: 256,
-            minzoom: 0,
-            maxzoom: 18
-          });
+          const apiKey = localStorage.getItem('openweather-api-key') || 'ba3708802ed7275ee958045d0a9a0f99';
+          
+          // Check if source already exists to avoid recreating and enable caching
+          if (!map.current.getSource('cloud-tiles')) {
+            map.current.addSource('cloud-tiles', {
+              type: 'raster',
+              tiles: [
+                `https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=${apiKey}`
+              ],
+              tileSize: 256,
+              minzoom: 0,
+              maxzoom: 18,
+              scheme: 'xyz'
+            });
+          }
 
           map.current.addLayer({
             id: 'weather-clouds',
             type: 'raster',
             source: 'cloud-tiles',
             paint: {
-              'raster-opacity': 0.4,
+              'raster-opacity': cloudOpacity ?? 0.4,
               'raster-resampling': 'nearest'
             }
           });
@@ -717,9 +827,9 @@ const WeatherMap = () => {
     
     // Only update if style is loaded
     if (map.current.isStyleLoaded()) {
-      updateWeatherLayer(currentHour, showPrecipitation, showClouds);
+      updateWeatherLayer(currentHour, showPrecipitation, showClouds, precipitationOpacity, cloudOpacity);
     }
-  }, [hasWeatherAPI, currentHour, showPrecipitation, showClouds]);
+  }, [hasWeatherAPI, currentHour, showPrecipitation, showClouds, routeWeather, precipitationOpacity, cloudOpacity]);
 
   // Initialize map
   useEffect(() => {
@@ -826,7 +936,13 @@ const WeatherMap = () => {
       const currentCenter = map.current.getCenter();
       const currentZoom = map.current.getZoom();
       
-      (window as any).updateWeatherLayer(currentHour, showPrecipitation, showClouds);
+      (window as any).updateWeatherLayer(currentHour, showPrecipitation, showClouds, precipitationOpacity, cloudOpacity);
+      
+      // Update route visualization with new time-based weather
+      if (currentRoute && routePoints.length >= 2) {
+        console.log('Updating route visualization for new hour:', currentHour);
+        visualizeWeatherRoute(currentRoute, departureTime);
+      }
       
       // Restore map position after weather update
       map.current.jumpTo({
@@ -834,7 +950,7 @@ const WeatherMap = () => {
         zoom: currentZoom
       });
     }
-  }, [currentHour, showPrecipitation, showClouds]);
+  }, [currentHour, showPrecipitation, showClouds, routeWeather, precipitationOpacity, cloudOpacity, currentRoute, routePoints, departureTime, visualizeWeatherRoute]);
 
   // Handle departure time changes - regenerate route with new weather
   useEffect(() => {
@@ -918,9 +1034,11 @@ const WeatherMap = () => {
             setArrivalWeather(arrWeather?.current);
             
             // Fetch hourly forecasts for route points for travel recommendations
-            const forecasts: { [coordinate: string]: { [hour: number]: any } } = {};
-            const samplePoints = Math.min(currentRoute.geometry.coordinates.length, 10);
+            const forecasts: { [coordinate: string]: { [minute: number]: any } } = {};
+            const samplePoints = Math.min(currentRoute.geometry.coordinates.length, 100); // Increased to match travel recommendations
             const step = Math.max(1, Math.floor(currentRoute.geometry.coordinates.length / samplePoints));
+            
+            console.log(`Collecting weather data for travel recommendations: ${samplePoints} sample points, step: ${step}, total coords: ${currentRoute.geometry.coordinates.length}`);
             
             for (let i = 0; i < currentRoute.geometry.coordinates.length; i += step) {
               const [lon, lat] = currentRoute.geometry.coordinates[i];
@@ -930,12 +1048,16 @@ const WeatherMap = () => {
                 const weather = await getTimeBasedWeather(lat, lon, departureTime);
                 if (weather?.hourlyForecast) {
                   forecasts[coordKey] = weather.hourlyForecast;
+                  console.log(`Collected forecast for ${coordKey}: ${Object.keys(weather.hourlyForecast).length} time points`);
+                } else {
+                  console.warn(`No hourly forecast for ${coordKey}`);
                 }
               } catch (error) {
                 console.warn(`Failed to get weather for coordinate ${coordKey}:`, error);
               }
             }
             
+            console.log(`Weather data collection complete: ${Object.keys(forecasts).length} coordinates with forecast data`);
             setRouteHourlyForecasts(forecasts);
             
             // Generate travel recommendations
@@ -977,7 +1099,9 @@ const WeatherMap = () => {
       name: 'Departure' 
     };
     
-    setRoutePoints([newPoint]);
+    // Replace departure point, keep destination if it exists
+    const newRoutePoints = routePoints.length > 1 ? [newPoint, routePoints[1]] : [newPoint];
+    setRoutePoints(newRoutePoints);
     setCurrentRoute(null);
     
     // Add departure marker
@@ -1029,6 +1153,7 @@ const WeatherMap = () => {
       return;
     }
     
+    // Replace destination point, keep departure point
     const newRoutePoints = [routePoints[0], newPoint];
     setRoutePoints(newRoutePoints);
     
@@ -1134,12 +1259,12 @@ const WeatherMap = () => {
   // Effect to handle overlay changes without moving map
   useEffect(() => {
     if (map.current && map.current.isStyleLoaded() && mapCenter && preserveMapPosition) {
-      // Only update weather layers without moving map
-      if ((window as any).updateWeatherLayer) {
-        (window as any).updateWeatherLayer(currentHour, showPrecipitation, showClouds);
-      }
+          // Only update weather layers without moving map
+    if ((window as any).updateWeatherLayer) {
+      (window as any).updateWeatherLayer(currentHour, showPrecipitation, showClouds, precipitationOpacity, cloudOpacity);
     }
-  }, [showPrecipitation, showClouds, mapCenter, preserveMapPosition, currentHour]);
+    }
+  }, [showPrecipitation, showClouds, mapCenter, preserveMapPosition, currentHour, routeWeather, precipitationOpacity, cloudOpacity]);
 
   return (
     <div className="relative w-full h-screen overflow-hidden">
@@ -1197,14 +1322,18 @@ const WeatherMap = () => {
         <>
           {/* API Setup Dialogs */}
           {showApiKeySetup && (
-            <div className="absolute top-6 right-6 z-20 w-96">
-              <ApiKeySetup onApiKeySet={() => setShowApiKeySetup(false)} />
-            </div>
+            <ApiKeySetup 
+              onApiKeySet={() => setShowApiKeySetup(false)} 
+              onClose={() => setShowApiKeySetup(false)}
+            />
           )}
           
           {showAccuWeatherSetup && (
             <div className="absolute top-6 right-6 z-20 w-96">
-              <AccuWeatherSetup onApiKeySet={() => setShowAccuWeatherSetup(false)} />
+              <AccuWeatherSetup 
+                onApiKeySet={() => setShowAccuWeatherSetup(false)} 
+                onClose={() => setShowAccuWeatherSetup(false)}
+              />
             </div>
           )}
 
@@ -1233,8 +1362,12 @@ const WeatherMap = () => {
             }}
             showPrecipitation={showPrecipitation}
             showClouds={showClouds}
+            precipitationOpacity={precipitationOpacity}
+            cloudOpacity={cloudOpacity}
             onTogglePrecipitation={setShowPrecipitation}
             onToggleClouds={setShowClouds}
+            onPrecipitationOpacityChange={setPrecipitationOpacity}
+            onCloudOpacityChange={setCloudOpacity}
             mapboxToken={mapboxToken}
             onLocationSelect={(lng: number, lat: number, placeName: string) => {
               setClickedLocation({ lng, lat });
@@ -1251,12 +1384,19 @@ const WeatherMap = () => {
           
           {/* Travel Recommendations Panel */}
           {routePoints.length >= 2 && currentRoute && showTravelRecommendations && (
-            <div className="absolute top-6 left-6 z-10 w-80 max-h-[calc(100vh-8rem)] overflow-y-auto">
+            <div className="absolute top-6 left-6 z-10 w-80 max-w-[calc(100vw-3rem)] max-h-[calc(100vh-8rem)] overflow-y-auto overflow-x-hidden">
               <TravelRecommendations
                 recommendation={travelRecommendation}
                 loading={recommendationLoading}
                 onSelectDeparture={(time: Date) => {
                   setDepartureTime(time);
+                  setHasTimeUpdates(true);
+                  // Clear recommendations to force regeneration on update
+                  setTravelRecommendation(null);
+                  // Trigger immediate re-fetch by regenerating the route with new departure time
+                  if (currentRoute && routePoints.length >= 2) {
+                    generateRoute(routePoints);
+                  }
                   toast({
                     title: "Departure Time Updated",
                     description: `New departure: ${time.toLocaleTimeString()}`,
@@ -1313,6 +1453,23 @@ const WeatherMap = () => {
           </div>
         </div>
       )}
+
+      {/* Route Warning Dialog */}
+      <RouteWarningDialog
+        isOpen={showRouteWarning}
+        onClose={() => {
+          setShowRouteWarning(false);
+          setPendingRoute(null);
+        }}
+        routeDuration={pendingRouteDuration}
+        onContinue={() => {
+          if (pendingRoute) {
+            generateRoute(pendingRoute, true); // Skip warning on continue
+          }
+          setShowRouteWarning(false);
+          setPendingRoute(null);
+        }}
+      />
     </div>
   );
 };

@@ -3,14 +3,15 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { CloudRain, Key, ExternalLink } from 'lucide-react';
+import { CloudRain, Key, ExternalLink, X } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface ApiKeySetupProps {
   onApiKeySet: () => void;
+  onClose?: () => void;
 }
 
-const ApiKeySetup: React.FC<ApiKeySetupProps> = ({ onApiKeySet }) => {
+const ApiKeySetup: React.FC<ApiKeySetupProps> = ({ onApiKeySet, onClose }) => {
   const [apiKey, setApiKey] = useState('');
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
@@ -43,8 +44,18 @@ const ApiKeySetup: React.FC<ApiKeySetupProps> = ({ onApiKeySet }) => {
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <Card className="w-full max-w-md p-6 bg-background">
-        <div className="text-center mb-6">
+      <Card className="w-full max-w-md p-6 bg-background relative">
+        {onClose && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onClose}
+            className="absolute top-2 right-2 h-8 w-8 p-0"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        )}
+        <div className="text-center mb-6 pr-8">
           <div className="relative mx-auto mb-4 w-16 h-16 bg-primary/10 rounded-full flex items-center justify-center">
             <CloudRain className="h-8 w-8 text-primary" />
             <Key className="h-4 w-4 text-primary absolute -top-1 -right-1" />

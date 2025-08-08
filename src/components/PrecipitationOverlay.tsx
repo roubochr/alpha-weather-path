@@ -7,6 +7,7 @@ interface PrecipitationOverlayProps {
   currentHour: number;
   isAnimating: boolean;
   apiKey: string;
+  weatherData?: { [coordinate: string]: { precipitation: number } };
 }
 
 const PrecipitationOverlay: React.FC<PrecipitationOverlayProps> = ({
@@ -14,7 +15,8 @@ const PrecipitationOverlay: React.FC<PrecipitationOverlayProps> = ({
   isVisible,
   currentHour,
   isAnimating,
-  apiKey
+  apiKey,
+  weatherData
 }) => {
   const animationRef = useRef<number>();
   const timeRef = useRef<number>(currentHour);
@@ -30,7 +32,7 @@ const PrecipitationOverlay: React.FC<PrecipitationOverlayProps> = ({
     }
 
     updatePrecipitationLayer();
-  }, [map, isVisible, currentHour, apiKey]);
+  }, [map, isVisible, currentHour, apiKey, weatherData]);
 
   useEffect(() => {
     if (!isAnimating) {
@@ -98,7 +100,7 @@ const PrecipitationOverlay: React.FC<PrecipitationOverlayProps> = ({
       setTimeout(() => {
         if (!map || !map.isStyleLoaded()) return;
 
-        // Add precipitation layer with current time
+        // Add precipitation layer with dynamic opacity based on weather data
         if (!map.getSource('precipitation')) {
           map.addSource('precipitation', {
             type: 'raster',
@@ -111,13 +113,32 @@ const PrecipitationOverlay: React.FC<PrecipitationOverlayProps> = ({
           });
         }
 
+        // Calculate average precipitation intensity for dynamic opacity
+        let avgPrecipitation = 0;
+        let dataPoints = 0;
+        
+        if (weatherData) {
+          Object.values(weatherData).forEach(data => {
+            if (data.precipitation !== undefined) {
+              avgPrecipitation += data.precipitation;
+              dataPoints++;
+            }
+          });
+          avgPrecipitation = dataPoints > 0 ? avgPrecipitation / dataPoints : 0;
+        }
+
+        // Adjust opacity based on precipitation intensity
+        const baseOpacity = 0.85;
+        const intensityMultiplier = Math.min(avgPrecipitation / 2.0, 1.0); // Normalize to 0-1
+        const dynamicOpacity = baseOpacity * (0.3 + intensityMultiplier * 0.7);
+
         if (!map.getLayer('precipitation-layer')) {
           map.addLayer({
             id: 'precipitation-layer',
             type: 'raster',
             source: 'precipitation',
             paint: {
-              'raster-opacity': 0.85,
+              'raster-opacity': dynamicOpacity,
               'raster-fade-duration': 300,
               'raster-brightness-min': 0.0,
               'raster-brightness-max': 1.2,
@@ -125,7 +146,12 @@ const PrecipitationOverlay: React.FC<PrecipitationOverlayProps> = ({
               'raster-saturation': 0.3
             }
           });
+        } else {
+          // Update existing layer opacity
+          map.setPaintProperty('precipitation-layer', 'raster-opacity', dynamicOpacity);
         }
+        
+        console.log(`Precipitation overlay updated - Avg intensity: ${avgPrecipitation.toFixed(2)}mm/h, Opacity: ${dynamicOpacity.toFixed(2)}`);
       }, 100);
 
     } catch (error) {
