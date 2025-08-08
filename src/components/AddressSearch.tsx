@@ -140,7 +140,7 @@ const AddressSearch: React.FC<AddressSearchProps> = ({
       </form>
 
       {showResults && results.length > 0 && (
-        <Card className="absolute top-full left-0 right-0 mt-2 z-50 max-h-96 overflow-y-auto bg-background border-border">
+        <Card className="absolute top-full left-0 right-0 mt-2 z-50 max-h-[70vh] overflow-y-auto bg-background border-border">
           <div className="p-2">
             {results.map((result, index) => (
               <div 
