@@ -7,16 +7,15 @@ import { Badge } from '@/components/ui/badge';
 import { Cloud, CloudRain, Sun, AlertTriangle, MapPin, Wind, Droplets, Eye, Thermometer, ChevronLeft, ChevronRight } from 'lucide-react';
 import AddressSearch from '@/components/AddressSearch';
 import { useRouting, RouteData } from '@/hooks/useRouting';
-import { useTimeBasedWeather, TimeBasedWeatherData } from '@/hooks/useTimeBasedWeather';
+import { useTomorrowWeather, TomorrowWeatherResponse } from '@/hooks/useTomorrowWeather';
 import { useToast } from '@/hooks/use-toast';
-import ApiKeySetup from '@/components/ApiKeySetup';
-import TimeControls from '@/components/TimeControls';
+import WeatherTimeline from '@/components/WeatherTimeline';
+import TomorrowRadarOverlay from '@/components/TomorrowRadarOverlay';
 import WeatherLegend from '@/components/WeatherLegend';
 import OverlayControls from '@/components/OverlayControls';
 import WeatherForecast from '@/components/WeatherForecast';
 import LocationDialog from '@/components/LocationDialog';
 import MinimizableUI from '@/components/MinimizableUI';
-import AccuWeatherSetup from '@/components/AccuWeatherSetup';
 import RouteWarningDialog from '@/components/RouteWarningDialog';
 import TravelRecommendations from '@/components/TravelRecommendations';
 import { useTravelRecommendations, TravelRecommendation } from '@/hooks/useTravelRecommendations';
@@ -49,7 +48,6 @@ const WeatherMap = () => {
   // Core state
   const [mapboxToken, setMapboxToken] = useState<string>('');
   const [showTokenInput, setShowTokenInput] = useState(false);
-  const [hasWeatherAPI, setHasApiKey] = useState(false);
   const [currentLocation, setCurrentLocation] = useState<[number, number] | null>(null);
   const [userLocation, setUserLocation] = useState<[number, number] | null>(null);
   const [preserveMapPosition, setPreserveMapPosition] = useState(false);
@@ -63,7 +61,7 @@ const WeatherMap = () => {
   const [currentNavigationStep, setCurrentNavigationStep] = useState(0);
   
   // Weather and time state
-  const [currentHour, setCurrentHour] = useState(new Date().getHours());
+  const [currentTimestamp, setCurrentTimestamp] = useState(Date.now());
   const [isAnimating, setIsAnimating] = useState(false);
   const [departureTime, setDepartureTime] = useState(new Date());
   
@@ -84,13 +82,12 @@ const WeatherMap = () => {
   const [precipitationOpacity, setPrecipitationOpacity] = useState(0.7);
   const [cloudOpacity, setCloudOpacity] = useState(0.4);
   
-  // Weather forecast state
-  const [departureWeather, setDepartureWeather] = useState<any>(null);
-  const [arrivalWeather, setArrivalWeather] = useState<any>(null);
+  // Tomorrow.io weather state
+  const [weatherData, setWeatherData] = useState<TomorrowWeatherResponse | null>(null);
+  const [routeWeatherData, setRouteWeatherData] = useState<{ [coordinate: string]: import('@/hooks/useTomorrowWeather').TomorrowForecastData[] }>({});
   
   // Travel recommendations state
   const [travelRecommendation, setTravelRecommendation] = useState<TravelRecommendation | null>(null);
-  const [routeHourlyForecasts, setRouteHourlyForecasts] = useState<{ [coordinate: string]: { [minute: number]: any } }>({});
   
   // Route weather analysis
   const [routeWeather, setRouteWeather] = useState<Array<{
@@ -99,15 +96,13 @@ const WeatherMap = () => {
     weather?: WeatherData;
     rainProbability?: number;
   }>>([]);
-  const [showApiKeySetup, setShowApiKeySetup] = useState(false);
-  const [showAccuWeatherSetup, setShowAccuWeatherSetup] = useState(false);
   const [showRouteWarning, setShowRouteWarning] = useState(false);
   const [pendingRoute, setPendingRoute] = useState<RoutePoint[] | null>(null);
   const [pendingRouteDuration, setPendingRouteDuration] = useState<number>(0);
 
   const { toast } = useToast();
   const { getRoute, loading: routeLoading, error: routeError } = useRouting(mapboxToken);
-  const { getTimeBasedWeather } = useTimeBasedWeather();
+  const { getWeatherData, getWeatherForRoute, clearCache, loading: weatherLoading, error: weatherError } = useTomorrowWeather();
   const { generateRecommendation, loading: recommendationLoading } = useTravelRecommendations();
 
   // Auto-hide route info after 5 seconds when points are added
@@ -148,9 +143,9 @@ const WeatherMap = () => {
   }, [routePoints.length]);
 
   console.log('Rendering state:', {
-    hasWeatherAPI,
     showTokenInput,
-    mapboxToken: mapboxToken ? 'present' : 'missing'
+    mapboxToken: mapboxToken ? 'present' : 'missing',
+    weatherDataAvailable: !!weatherData
   });
 
   console.log('Route state:', {
@@ -161,11 +156,12 @@ const WeatherMap = () => {
   // Get precipitation color based on intensity with enhanced vibrancy
   const getPrecipitationColor = useCallback((precipitation: number): string => {
     if (precipitation === 0) return '#10b981'; // Emerald - no rain
-    if (precipitation < 0.5) return '#84cc16'; // Lime - very light rain
-    if (precipitation < 1) return '#f59e0b'; // Amber - light rain  
-    if (precipitation < 3) return '#f97316'; // Orange - moderate rain
-    if (precipitation < 10) return '#ef4444'; // Red - heavy rain
-    return '#dc2626'; // Dark red - very heavy rain
+    if (precipitation < 0.1) return '#22c55e'; // Green - very light rain
+    if (precipitation < 0.5) return '#84cc16'; // Lime - light rain
+    if (precipitation < 1) return '#f59e0b'; // Amber - moderate rain  
+    if (precipitation < 3) return '#f97316'; // Orange - heavy rain
+    if (precipitation < 10) return '#ef4444'; // Red - very heavy rain
+    return '#dc2626'; // Dark red - extreme rain
   }, []);
 
   // Enhanced geolocation setup with user location as default
@@ -227,39 +223,19 @@ const WeatherMap = () => {
   const visualizeWeatherRoute = useCallback(async (routeData: RouteData, departureTime: Date) => {
     if (!map.current) return;
 
-    // Sample points along the route more frequently for better resolution
+    console.log('Updating route with Tomorrow.io weather data...');
+    
+    // Get weather data for the route
+    const routeWeather = await getWeatherForRoute(
+      routeData.geometry.coordinates as [number, number][],
+      departureTime,
+      routeData.duration
+    );
+    
+    setRouteWeatherData(routeWeather);
+
+    // Create simple route visualization
     const coordinates = routeData.geometry.coordinates;
-    const samplePoints: Array<{ coordinate: [number, number], arrivalTime: Date }> = [];
-    
-    // Calculate timing for each point with higher resolution
-    const totalDistance = routeData.distance;
-    const totalDuration = routeData.duration;
-    const sampleInterval = Math.max(1, Math.floor(coordinates.length / 50)); // More sample points
-    
-    for (let i = 0; i < coordinates.length; i += sampleInterval) {
-      const progress = i / (coordinates.length - 1);
-      const arrivalTime = new Date(departureTime.getTime() + progress * totalDuration * 1000);
-      samplePoints.push({
-        coordinate: coordinates[i] as [number, number],
-        arrivalTime
-      });
-    }
-
-    // Add the final point
-    if (coordinates.length > 0) {
-      const finalTime = new Date(departureTime.getTime() + totalDuration * 1000);
-      samplePoints.push({
-        coordinate: coordinates[coordinates.length - 1] as [number, number],
-        arrivalTime: finalTime
-      });
-    }
-
-    // Fetch weather for each sample point with actual API data
-    const weatherSegments = await Promise.all(
-      samplePoints.map(async (point, index) => {
-        try {
-          // Use actual weather API for each coordinate
-          const weather = await getTimeBasedWeather(point.coordinate[1], point.coordinate[0], point.arrivalTime);
           
           if (weather?.current) {
             return {
@@ -1268,13 +1244,20 @@ const WeatherMap = () => {
 
   return (
     <div className="relative w-full h-screen overflow-hidden">
-      {!hasWeatherAPI && (
-        <ApiKeySetup 
-          onApiKeySet={() => {
-            setHasApiKey(true);
+        <WeatherTimeline
+          currentTime={currentTimestamp}
+          isAnimating={isAnimating}
+          onTimeChange={setCurrentTimestamp}
+          onToggleAnimation={() => setIsAnimating(!isAnimating)}
+          forecastData={weatherData?.hourly || []}
+          routeWeatherData={routeWeatherData}
+          routeCoordinates={currentRoute?.geometry.coordinates as [number, number][]}
+          onRouteWeatherUpdate={async () => {
+            if (currentRoute) {
+              await visualizeWeatherRoute(currentRoute, departureTime);
+            }
           }}
         />
-      )}
       
       {showTokenInput && (
         <div className="absolute top-4 left-4 z-10 bg-card border border-border rounded-lg p-4 shadow-lg">
