@@ -99,6 +99,7 @@ const WeatherMap = () => {
     weather?: WeatherData;
     rainProbability?: number;
   }>>([]);
+  const [routeWeatherSegments, setRouteWeatherSegments] = useState<any[]>([]);
   const [showApiKeySetup, setShowApiKeySetup] = useState(false);
   const [showAccuWeatherSetup, setShowAccuWeatherSetup] = useState(false);
   const [showRouteWarning, setShowRouteWarning] = useState(false);
@@ -291,6 +292,16 @@ const WeatherMap = () => {
       })
     );
 
+    // Store weather segments for time-based updates
+    setRouteWeatherSegments(weatherSegments);
+
+    updateRouteVisualization(weatherSegments, coordinates);
+  }, [getTimeBasedWeather, getPrecipitationColor]);
+
+  // New function to update route visualization based on current time
+  const updateRouteVisualization = useCallback((weatherSegments: any[], coordinates: any[]) => {
+    if (!map.current || !weatherSegments.length) return;
+
     // Remove existing route layers and markers
     ['route-line', 'route-line-glow'].forEach(layerId => {
       if (map.current!.getLayer(layerId)) {
@@ -306,23 +317,27 @@ const WeatherMap = () => {
     const existingMarkers = document.querySelectorAll('[data-weather-marker="true"]');
     existingMarkers.forEach(marker => marker.remove());
 
-    // Create multiple line segments with smooth gradients and better curves
+    // Create multiple line segments with colors based on current time offset
     const lineSegments = [];
     
     for (let i = 0; i < weatherSegments.length - 1; i++) {
       const segment = weatherSegments[i];
       const nextSegment = weatherSegments[i + 1];
       
-      // Get colors for smooth transitions
-      const startColor = getPrecipitationColor(segment.weather.precipitation);
-      const endColor = getPrecipitationColor(nextSegment.weather.precipitation);
+      // Calculate precipitation based on current time offset from arrival time
+      const timeOffset = currentHour - segment.arrivalTime.getHours();
+      const adjustedPrecipitation = Math.max(0, segment.weather.precipitation * (1 + timeOffset * 0.1));
+      const nextAdjustedPrecipitation = Math.max(0, nextSegment.weather.precipitation * (1 + timeOffset * 0.1));
       
-      console.log(`Segment ${i}: precipitation=${segment.weather.precipitation}mm/h, color=${startColor}`);
-      console.log(`Next segment: precipitation=${nextSegment.weather.precipitation}mm/h, color=${endColor}`);
+      // Get colors for smooth transitions based on adjusted precipitation
+      const startColor = getPrecipitationColor(adjustedPrecipitation);
+      const endColor = getPrecipitationColor(nextAdjustedPrecipitation);
+      
+      console.log(`Segment ${i}: original precipitation=${segment.weather.precipitation}mm/h, adjusted=${adjustedPrecipitation.toFixed(1)}mm/h, color=${startColor}`);
       
       // Find exact coordinates in route for smooth path following
       const segmentCoords = [];
-       const startIdx = coordinates.findIndex(coord => 
+      const startIdx = coordinates.findIndex(coord => 
         Math.abs(coord[0] - segment.coordinate[0]) < 0.0005 && 
         Math.abs(coord[1] - segment.coordinate[1]) < 0.0005
       );
@@ -370,7 +385,7 @@ const WeatherMap = () => {
         properties: {
           color: startColor,
           gradientEnd: endColor,
-          precipitation: segment.weather.precipitation,
+          precipitation: adjustedPrecipitation,
           temperature: segment.weather.temperature,
           condition: segment.weather.condition,
           arrivalTime: segment.arrivalTime.toLocaleTimeString(),
@@ -1086,6 +1101,14 @@ const WeatherMap = () => {
 
     updateForecasts();
   }, [routePoints, departureTime, currentRoute, getTimeBasedWeather, generateRecommendation]);
+
+  // Update route visualization when time changes
+  useEffect(() => {
+    if (routeWeatherSegments.length > 0 && currentRoute) {
+      console.log('Updating route colors for time:', currentHour);
+      updateRouteVisualization(routeWeatherSegments, currentRoute.geometry.coordinates);
+    }
+  }, [currentHour, routeWeatherSegments, currentRoute, updateRouteVisualization]);
 
   console.log('Rendering main weather map interface...');
 
