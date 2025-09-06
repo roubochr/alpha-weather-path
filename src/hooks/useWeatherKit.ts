@@ -44,11 +44,14 @@ export const useWeatherKit = () => {
 
     try {
       // Use Supabase Edge Function for weather data
+      console.log('Calling Supabase weather function with coordinates:', lat, lon);
       const { supabase } = await import('@/integrations/supabase/client');
       
       const { data, error } = await supabase.functions.invoke('weather', {
         body: { lat, lon }
       });
+
+      console.log('Supabase function response:', { data, error });
 
       if (error) {
         throw new Error(error.message || 'Failed to fetch weather data');
