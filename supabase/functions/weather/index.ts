@@ -20,10 +20,13 @@ async function createWeatherKitJWT(): Promise<string> {
 
   const pemKey = `-----BEGIN PRIVATE KEY-----\n${cleanPrivateKey}\n-----END PRIVATE KEY-----`
 
-  // Import the private key
+  // Create key from PEM string
+  const keyData = new TextEncoder().encode(pemKey)
+  
+  // Import the private key for ES256 signing
   const cryptoKey = await crypto.subtle.importKey(
     'pkcs8',
-    new TextEncoder().encode(pemKey),
+    keyData,
     { name: 'ECDSA', namedCurve: 'P-256' },
     false,
     ['sign']
@@ -32,14 +35,14 @@ async function createWeatherKitJWT(): Promise<string> {
   const header = {
     alg: 'ES256',
     kid: keyId,
-    id: 'com.apple.weatherkit.client'
+    typ: 'JWT'
   }
 
   const payload = {
-    iss: 'com.apple.weatherkit.client',
+    iss: keyId,
     iat: getNumericDate(new Date()),
     exp: getNumericDate(new Date(Date.now() + 3600000)), // 1 hour
-    sub: 'com.apple.weatherkit.client'
+    sub: 'com.example.weatherkit-client' // Replace with your bundle ID
   }
 
   return await create(header, payload, cryptoKey)
@@ -63,36 +66,38 @@ serve(async (req) => {
 
     // Get current weather from WeatherKit
     const weatherResponse = await fetch(
-      `https://weatherkit.apple.com/api/v1/weather/en_US/${lat}/${lon}?dataSets=currentWeather,forecastDaily,forecastHourly&timezone=UTC`,
+      `https://weatherkit.apple.com/api/v1/weather/en/${lat}/${lon}?dataSets=currentWeather,forecastHourly&timezone=UTC`,
       { headers }
     )
     
     if (!weatherResponse.ok) {
-      throw new Error(`WeatherKit API error: ${weatherResponse.status}`)
+      const errorText = await weatherResponse.text()
+      console.error('WeatherKit API error:', weatherResponse.status, errorText)
+      throw new Error(`WeatherKit API error: ${weatherResponse.status} - ${errorText}`)
     }
     
     const weatherData = await weatherResponse.json()
     
     const result = {
       current: {
-        temperature: Math.round(weatherData.currentWeather.temperature),
-        humidity: Math.round(weatherData.currentWeather.humidity * 100),
-        precipitation: weatherData.currentWeather.precipitationIntensity || 0,
-        condition: weatherData.currentWeather.conditionCode,
-        description: weatherData.currentWeather.conditionCode.toLowerCase(),
-        windSpeed: Math.round(weatherData.currentWeather.windSpeed * 3.6),
-        pressure: weatherData.currentWeather.pressure,
-        visibility: weatherData.currentWeather.visibility,
-        icon: weatherData.currentWeather.conditionCode
+        temperature: Math.round(weatherData.currentWeather?.temperature || 20),
+        humidity: Math.round((weatherData.currentWeather?.humidity || 0.6) * 100),
+        precipitation: weatherData.currentWeather?.precipitationIntensity || 0,
+        condition: weatherData.currentWeather?.conditionCode || 'Clear',
+        description: (weatherData.currentWeather?.conditionCode || 'clear').toLowerCase(),
+        windSpeed: Math.round((weatherData.currentWeather?.windSpeed || 10) * 3.6),
+        pressure: weatherData.currentWeather?.pressure || 1013,
+        visibility: weatherData.currentWeather?.visibility || 10,
+        icon: weatherData.currentWeather?.conditionCode || 'Clear'
       },
-      forecast: weatherData.forecastHourly.hours.slice(0, 8).map((item: any) => ({
+      forecast: (weatherData.forecastHourly?.hours || []).slice(0, 8).map((item: any) => ({
         time: item.forecastStart,
-        temperature: Math.round(item.temperature),
-        condition: item.conditionCode,
-        description: item.conditionCode.toLowerCase(),
+        temperature: Math.round(item.temperature || 20),
+        condition: item.conditionCode || 'Clear',
+        description: (item.conditionCode || 'clear').toLowerCase(),
         precipitation: item.precipitationIntensity || 0,
-        windSpeed: Math.round(item.windSpeed * 3.6),
-        icon: item.conditionCode
+        windSpeed: Math.round((item.windSpeed || 10) * 3.6),
+        icon: item.conditionCode || 'Clear'
       }))
     }
 

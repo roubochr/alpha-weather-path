@@ -261,23 +261,7 @@ const MinimizableUI: React.FC<MinimizableUIProps> = ({
                     </div>
                   </div>
                 </div>
-                <Button 
-                  variant="outline" 
-                  onClick={onApiSetup}
-                  className="w-full justify-start"
-                >
-                  <Settings className="w-4 h-4 mr-2" />
-                  WeatherKit API
-                </Button>
-              </div>
-              
-              <div className="text-xs text-muted-foreground bg-muted/30 rounded p-3">
-                <div className="font-medium mb-2">API Setup:</div>
-                <div className="space-y-1">
-                  <div>• <strong>AccuWeather:</strong> Minute-by-minute precipitation for trips under 2 hours</div>
-                  <div>• <strong>WeatherKit:</strong> Apple's high-quality weather data for comprehensive forecasts</div>
-                  <div>• Both APIs provide professional-grade weather data</div>
-                </div>
+                {/* WeatherKit is now configured via Supabase secrets */}
               </div>
             </div>
           )}
