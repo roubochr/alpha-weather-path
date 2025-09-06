@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { WeatherData, ForecastData } from './useWeatherAPI';
+import { WeatherData, ForecastData } from './useWeatherKit';
 
 export interface TimeBasedWeatherData {
   current: WeatherData;

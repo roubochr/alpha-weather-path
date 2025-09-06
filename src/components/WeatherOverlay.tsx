@@ -9,7 +9,7 @@ import {
   Gauge, 
   Droplets 
 } from 'lucide-react';
-import { WeatherData } from '@/hooks/useWeatherAPI';
+import { WeatherData } from '@/hooks/useWeatherKit';
 
 interface WeatherOverlayProps {
   weather: WeatherData;

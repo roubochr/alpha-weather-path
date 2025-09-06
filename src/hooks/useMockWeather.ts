@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { WeatherData, ForecastData, WeatherResponse } from './useWeatherAPI';
+import { WeatherData, ForecastData, WeatherResponse } from './useWeatherKit';
 
 // Mock weather conditions based on location
 const weatherConditions = [

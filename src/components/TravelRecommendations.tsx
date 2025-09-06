@@ -104,7 +104,7 @@ const TravelRecommendations: React.FC<TravelRecommendationsProps> = ({
           <div className={`flex items-center gap-2 p-3 rounded-lg border ${getRiskColor(recommendation.currentConditions.riskLevel)}`}>
             {getRiskIcon(recommendation.currentConditions.riskLevel)}
             <span className="text-sm font-medium">
-              {recommendation.currentConditions.message}
+              {recommendation.currentConditions.conditionsMessage}
             </span>
           </div>
         </div>
@@ -114,17 +114,17 @@ const TravelRecommendations: React.FC<TravelRecommendationsProps> = ({
           <h4 className="font-semibold text-sm">Recommendation</h4>
           <div className="p-3 bg-muted rounded-lg">
             <div className="flex items-start gap-2">
-              {recommendation.shouldWait ? (
+              {recommendation.immediateAction.includes('Delay') ? (
                 <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5" />
               ) : (
                 <CheckCircle className="h-5 w-5 text-green-500 mt-0.5" />
               )}
               <div>
                 <p className="text-sm font-medium">
-                  {recommendation.shouldWait ? 'Consider Waiting' : 'Safe to Depart'}
+                  {recommendation.immediateAction}
                 </p>
                 <p className="text-sm text-muted-foreground">
-                  {recommendation.reason}
+                  {recommendation.generalAdvice}
                 </p>
               </div>
             </div>
@@ -135,13 +135,13 @@ const TravelRecommendations: React.FC<TravelRecommendationsProps> = ({
         <div className="space-y-2">
           <h4 className="font-semibold text-sm">Weather Outlook</h4>
           <div className="flex items-center gap-2 p-3 bg-background border rounded-lg">
-            {recommendation.improvementForecast.willImprove ? (
+            {recommendation.currentConditions.improvementForecast.willImprove ? (
               <TrendingUp className="h-4 w-4 text-green-500" />
             ) : (
               <TrendingDown className="h-4 w-4 text-muted-foreground" />
             )}
             <span className="text-sm">
-              {recommendation.improvementForecast.message}
+              {recommendation.currentConditions.improvementForecast.message}
             </span>
           </div>
         </div>
@@ -226,7 +226,7 @@ const TravelRecommendations: React.FC<TravelRecommendationsProps> = ({
           <Button
             variant="outline"
             size="sm"
-            onClick={() => onSelectDeparture(recommendation.bestDepartureTime)}
+            onClick={() => onSelectDeparture(recommendation.alternativeWindows[0]?.departureTime || new Date())}
             className="flex-1"
           >
             <Clock className="h-4 w-4 mr-2" />

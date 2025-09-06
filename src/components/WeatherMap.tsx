@@ -7,17 +7,17 @@ import { Badge } from '@/components/ui/badge';
 import { Cloud, CloudRain, Sun, AlertTriangle, MapPin, Wind, Droplets, Eye, Thermometer, ChevronLeft, ChevronRight } from 'lucide-react';
 import AddressSearch from '@/components/AddressSearch';
 import { useRouting, RouteData } from '@/hooks/useRouting';
-import { useTimeBasedWeather, TimeBasedWeatherData } from '@/hooks/useTimeBasedWeather';
+import { useWeatherKit, TimeBasedWeatherData } from '@/hooks/useWeatherKit';
 import { useToast } from '@/hooks/use-toast';
-import ApiKeySetup from '@/components/ApiKeySetup';
 import TimeControls from '@/components/TimeControls';
 import WeatherLegend from '@/components/WeatherLegend';
 import OverlayControls from '@/components/OverlayControls';
 import WeatherForecast from '@/components/WeatherForecast';
 import LocationDialog from '@/components/LocationDialog';
 import MinimizableUI from '@/components/MinimizableUI';
-import AccuWeatherSetup from '@/components/AccuWeatherSetup';
 import RouteWarningDialog from '@/components/RouteWarningDialog';
+import WeatherKitRadar from '@/components/WeatherKitRadar';
+import WeatherKitTimeline from '@/components/WeatherKitTimeline';
 import TravelRecommendations from '@/components/TravelRecommendations';
 import { useTravelRecommendations, TravelRecommendation } from '@/hooks/useTravelRecommendations';
 import { Toaster } from '@/components/ui/toaster';
@@ -108,7 +108,7 @@ const WeatherMap = () => {
 
   const { toast } = useToast();
   const { getRoute, loading: routeLoading, error: routeError } = useRouting(mapboxToken);
-  const { getTimeBasedWeather } = useTimeBasedWeather();
+  const { getTimeBasedWeather } = useWeatherKit();
   const { generateRecommendation, loading: recommendationLoading } = useTravelRecommendations();
 
   // Auto-hide route info after 5 seconds when points are added
@@ -1079,9 +1079,9 @@ const WeatherMap = () => {
               try {
                 const recommendation = await generateRecommendation(
                   currentRoute.geometry.coordinates,
+                  departureTime,
                   currentRoute.duration,
-                  forecasts,
-                  departureTime
+                  forecasts
                 );
                 setTravelRecommendation(recommendation);
               } catch (error) {
@@ -1292,11 +1292,17 @@ const WeatherMap = () => {
   return (
     <div className="relative w-full h-screen overflow-hidden">
       {!hasWeatherAPI && (
-        <ApiKeySetup 
-          onApiKeySet={() => {
-            setHasApiKey(true);
-          }}
-        />
+        <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card p-6 rounded-lg shadow-lg">
+            <h2 className="text-lg font-semibold mb-2">WeatherKit Integration</h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              WeatherKit is now configured for weather data.
+            </p>
+            <Button onClick={() => setHasApiKey(true)}>
+              Continue
+            </Button>
+          </div>
+        </div>
       )}
       
       {showTokenInput && (
@@ -1343,22 +1349,26 @@ const WeatherMap = () => {
       
       {hasWeatherAPI && (
         <>
-          {/* API Setup Dialogs */}
-          {showApiKeySetup && (
-            <ApiKeySetup 
-              onApiKeySet={() => setShowApiKeySetup(false)} 
-              onClose={() => setShowApiKeySetup(false)}
+          {/* WeatherKit Timeline */}
+          <div className="absolute bottom-4 left-4 right-4 z-10">
+            <WeatherKitTimeline
+              currentHour={currentHour}
+              onHourChange={setCurrentHour}
+              isAnimating={isAnimating}
+              onAnimationToggle={() => setIsAnimating(!isAnimating)}
+              weatherData={departureWeather}
             />
-          )}
-          
-          {showAccuWeatherSetup && (
-            <div className="absolute top-6 right-6 z-20 w-96">
-              <AccuWeatherSetup 
-                onApiKeySet={() => setShowAccuWeatherSetup(false)} 
-                onClose={() => setShowAccuWeatherSetup(false)}
-              />
-            </div>
-          )}
+          </div>
+
+          {/* WeatherKit Radar Overlay */}
+          <WeatherKitRadar
+            map={map.current}
+            isVisible={showPrecipitation}
+            isAnimating={isAnimating}
+            currentHour={currentHour}
+            opacity={precipitationOpacity}
+            weatherData={departureWeather}
+          />
 
           {/* Minimizable UI for mobile */}
           <MinimizableUI
