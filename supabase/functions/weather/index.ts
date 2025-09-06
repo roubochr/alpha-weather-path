@@ -1,5 +1,49 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
 import { corsHeaders } from '../_shared/cors.ts'
+import { create, getNumericDate } from 'https://deno.land/x/djwt@v3.0.1/mod.ts'
+
+// Helper function to create JWT for WeatherKit authentication
+async function createWeatherKitJWT(): Promise<string> {
+  const keyId = Deno.env.get('WEATHERKIT_KEY_ID')
+  const privateKey = Deno.env.get('WEATHERKIT_PRIVATE_KEY')
+  
+  if (!keyId || !privateKey) {
+    throw new Error('WeatherKit credentials not configured in Supabase secrets')
+  }
+
+  // Clean up the private key format
+  const cleanPrivateKey = privateKey
+    .replace(/\\n/g, '\n')
+    .replace(/-----BEGIN PRIVATE KEY-----\n?/, '')
+    .replace(/\n?-----END PRIVATE KEY-----/, '')
+    .trim()
+
+  const pemKey = `-----BEGIN PRIVATE KEY-----\n${cleanPrivateKey}\n-----END PRIVATE KEY-----`
+
+  // Import the private key
+  const cryptoKey = await crypto.subtle.importKey(
+    'pkcs8',
+    new TextEncoder().encode(pemKey),
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    false,
+    ['sign']
+  )
+
+  const header = {
+    alg: 'ES256',
+    kid: keyId,
+    id: 'com.apple.weatherkit.client'
+  }
+
+  const payload = {
+    iss: 'com.apple.weatherkit.client',
+    iat: getNumericDate(new Date()),
+    exp: getNumericDate(new Date(Date.now() + 3600000)), // 1 hour
+    sub: 'com.apple.weatherkit.client'
+  }
+
+  return await create(header, payload, cryptoKey)
+}
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -9,49 +53,46 @@ serve(async (req) => {
   try {
     const { lat, lon } = await req.json()
     
-    const apiKey = Deno.env.get('OPENWEATHER_API_KEY')
-    if (!apiKey) {
-      throw new Error('OpenWeather API key not configured in Supabase secrets')
+    // Create JWT token for WeatherKit authentication
+    const token = await createWeatherKitJWT()
+    
+    const headers = {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
     }
 
-    // Get current weather
+    // Get current weather from WeatherKit
     const weatherResponse = await fetch(
-      `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`
+      `https://weatherkit.apple.com/api/v1/weather/en_US/${lat}/${lon}?dataSets=currentWeather,forecastDaily,forecastHourly&timezone=UTC`,
+      { headers }
     )
     
     if (!weatherResponse.ok) {
-      throw new Error('Failed to fetch weather data')
+      throw new Error(`WeatherKit API error: ${weatherResponse.status}`)
     }
     
     const weatherData = await weatherResponse.json()
     
-    // Get forecast
-    const forecastResponse = await fetch(
-      `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${apiKey}&units=metric`
-    )
-    
-    const forecastData = await forecastResponse.json()
-    
     const result = {
       current: {
-        temperature: Math.round(weatherData.main.temp),
-        humidity: weatherData.main.humidity,
-        precipitation: weatherData.rain?.['1h'] || 0,
-        condition: weatherData.weather[0].main,
-        description: weatherData.weather[0].description,
-        windSpeed: Math.round(weatherData.wind.speed * 3.6),
-        pressure: weatherData.main.pressure,
-        visibility: weatherData.visibility / 1000,
-        icon: weatherData.weather[0].icon
+        temperature: Math.round(weatherData.currentWeather.temperature),
+        humidity: Math.round(weatherData.currentWeather.humidity * 100),
+        precipitation: weatherData.currentWeather.precipitationIntensity || 0,
+        condition: weatherData.currentWeather.conditionCode,
+        description: weatherData.currentWeather.conditionCode.toLowerCase(),
+        windSpeed: Math.round(weatherData.currentWeather.windSpeed * 3.6),
+        pressure: weatherData.currentWeather.pressure,
+        visibility: weatherData.currentWeather.visibility,
+        icon: weatherData.currentWeather.conditionCode
       },
-      forecast: forecastData.list.slice(0, 8).map((item: any) => ({
-        time: item.dt_txt,
-        temperature: Math.round(item.main.temp),
-        condition: item.weather[0].main,
-        description: item.weather[0].description,
-        precipitation: item.rain?.['3h'] || 0,
-        windSpeed: Math.round(item.wind.speed * 3.6),
-        icon: item.weather[0].icon
+      forecast: weatherData.forecastHourly.hours.slice(0, 8).map((item: any) => ({
+        time: item.forecastStart,
+        temperature: Math.round(item.temperature),
+        condition: item.conditionCode,
+        description: item.conditionCode.toLowerCase(),
+        precipitation: item.precipitationIntensity || 0,
+        windSpeed: Math.round(item.windSpeed * 3.6),
+        icon: item.conditionCode
       }))
     }
 
