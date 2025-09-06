@@ -44,21 +44,18 @@ export const useWeatherKit = () => {
 
     try {
       // Use Supabase Edge Function for weather data
-      const response = await fetch('/api/weather', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ lat, lon })
+      const { supabase } = await import('@/integrations/supabase/client');
+      
+      const { data, error } = await supabase.functions.invoke('weather', {
+        body: { lat, lon }
       });
 
-      if (!response.ok) {
-        throw new Error('Failed to fetch weather data from API');
+      if (error) {
+        throw new Error(error.message || 'Failed to fetch weather data');
       }
 
-      const weatherData = await response.json();
       setLoading(false);
-      return weatherData;
+      return data;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch weather data from WeatherKit';
       setError(errorMessage);
@@ -73,6 +70,8 @@ export const useWeatherKit = () => {
     setError(null);
 
     try {
+      const { supabase } = await import('@/integrations/supabase/client');
+      
       const weatherData = await getWeatherData(lat, lon);
       if (!weatherData) return null;
 
