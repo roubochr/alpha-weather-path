@@ -1,5 +1,4 @@
 import { useState, useCallback } from 'react';
-import { TimeBasedWeatherData } from './useTimeBasedWeather';
 
 export interface TravelWindow {
   departureTime: Date;

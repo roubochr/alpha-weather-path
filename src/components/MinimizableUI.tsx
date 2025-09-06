@@ -267,7 +267,7 @@ const MinimizableUI: React.FC<MinimizableUIProps> = ({
                   className="w-full justify-start"
                 >
                   <Settings className="w-4 h-4 mr-2" />
-                  OpenWeather API
+                  WeatherKit API
                 </Button>
               </div>
               
@@ -275,8 +275,8 @@ const MinimizableUI: React.FC<MinimizableUIProps> = ({
                 <div className="font-medium mb-2">API Setup:</div>
                 <div className="space-y-1">
                   <div>• <strong>AccuWeather:</strong> Minute-by-minute precipitation for trips under 2 hours</div>
-                  <div>• <strong>OpenWeather:</strong> 5-day weather forecasts for longer trips</div>
-                  <div>• Both APIs are free with registration</div>
+                  <div>• <strong>WeatherKit:</strong> Apple's high-quality weather data for comprehensive forecasts</div>
+                  <div>• Both APIs provide professional-grade weather data</div>
                 </div>
               </div>
             </div>

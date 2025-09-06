@@ -68,8 +68,8 @@ const WeatherKitRadar: React.FC<WeatherKitRadarProps> = ({
     const radarSource = {
       type: 'raster' as const,
       tiles: [
-        // This would be replaced with actual WeatherKit radar tile URLs
-        `https://api.openweathermap.org/maps/2.0/weather/PA0/{z}/{x}/{y}?appid=demo&date=${Math.floor(Date.now() / 1000) + (currentHour * 3600)}`
+        // WeatherKit radar tile URLs would be configured here
+        `https://weatherkit.apple.com/api/v1/radar/{z}/{x}/{y}?date=${Math.floor(Date.now() / 1000) + (currentHour * 3600)}`
       ],
       tileSize: 256
     };

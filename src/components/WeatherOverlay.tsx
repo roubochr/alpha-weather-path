@@ -36,7 +36,7 @@ const WeatherOverlay: React.FC<WeatherOverlayProps> = ({ weather, position }) =>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center space-x-2">
           <img 
-            src={`https://openweathermap.org/img/wn/${weather.icon}@2x.png`}
+            src={`/weather-icons/${weather.icon}.png`}
             alt={weather.description}
             className="w-8 h-8"
           />

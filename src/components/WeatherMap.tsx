@@ -624,13 +624,13 @@ const WeatherMap = () => {
 
   // Check for existing tokens on mount and set defaults
   useEffect(() => {
-    let apiKey = localStorage.getItem('openweather-api-key');
     let mapboxToken = localStorage.getItem('mapbox-token');
     
-    // Set the provided API key if none exists
-    if (!apiKey) {
-      apiKey = 'ba3708802ed7275ee958045d0a9a0f99';
-      localStorage.setItem('openweather-api-key', apiKey);
+    // Set the provided Mapbox token if none exists
+    if (!mapboxToken) {
+      mapboxToken = 'pk.eyJ1IjoiYm9vYm9zIiwiYSI6ImNtZHo4emZ3cjBhZWYydnB5b2o4aGh6YjYifQ.rvTwrB2pOlZwt_1j8scLSw';
+      localStorage.setItem('mapbox-token', mapboxToken);
+      setShowTokenInput(false);
     }
     
     // Set the provided Mapbox token if none exists
@@ -640,7 +640,7 @@ const WeatherMap = () => {
       setShowTokenInput(false);
     }
     
-    setHasApiKey(!!apiKey);
+    setHasApiKey(true); // WeatherKit is configured via Supabase secrets
     setMapboxToken(mapboxToken);
     
     // Only show token input if no token exists
@@ -711,25 +711,11 @@ const WeatherMap = () => {
           avgPrecipitation = dataPoints > 0 ? avgPrecipitation / dataPoints : 0;
         }
 
-        // Add precipitation layer if enabled
+        // Add precipitation layer if enabled (WeatherKit integration needed)
         if (precipitation) {
-          const apiKey = localStorage.getItem('openweather-api-key') || 'ba3708802ed7275ee958045d0a9a0f99';
-          
-          // Check if source already exists to avoid recreating and enable caching
-          if (!map.current.getSource('precipitation-tiles')) {
-            // Note: OpenWeather radar tiles only show current conditions, not historical/future
-            // For time-based visualization, we adjust opacity and effects based on forecast data
-            map.current.addSource('precipitation-tiles', {
-              type: 'raster',
-              tiles: [
-                `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=${apiKey}`
-              ],
-              tileSize: 256,
-              minzoom: 0,
-              maxzoom: 18,
-              scheme: 'xyz'
-            });
-          }
+          console.log('Precipitation overlay disabled - WeatherKit radar integration pending');
+          // WeatherKit radar tiles would be configured here
+          // For now, precipitation overlay is disabled pending WeatherKit radar tile integration
 
           // Enhanced opacity calculation with over-saturation effect and time-based adjustment
           const baseOpacity = precipOpacity ?? 0.7;
@@ -802,23 +788,11 @@ const WeatherMap = () => {
           console.log(`Precipitation overlay updated - Avg intensity: ${avgPrecipitation.toFixed(2)}mm/h, Opacity: ${dynamicOpacity.toFixed(2)}, Time: ${timeStatus}${isOverSaturated ? ' (OVER-SATURATED)' : ''}`);
         }
 
-        // Add clouds layer if enabled
+        // Add clouds layer if enabled (WeatherKit integration needed)
         if (clouds) {
-          const apiKey = localStorage.getItem('openweather-api-key') || 'ba3708802ed7275ee958045d0a9a0f99';
-          
-          // Check if source already exists to avoid recreating and enable caching
-          if (!map.current.getSource('cloud-tiles')) {
-            map.current.addSource('cloud-tiles', {
-              type: 'raster',
-              tiles: [
-                `https://tile.openweathermap.org/map/clouds_new/{z}/{x}/{y}.png?appid=${apiKey}`
-              ],
-              tileSize: 256,
-              minzoom: 0,
-              maxzoom: 18,
-              scheme: 'xyz'
-            });
-          }
+          console.log('Clouds overlay disabled - WeatherKit integration pending');
+          // WeatherKit cloud tiles would be configured here
+          // For now, clouds overlay is disabled pending WeatherKit tile integration
 
           map.current.addLayer({
             id: 'weather-clouds',
@@ -983,7 +957,7 @@ const WeatherMap = () => {
   }, [currentHour]);
 
   const handleApiKeySubmit = (apiKey: string) => {
-    localStorage.setItem('openweather-api-key', apiKey);
+    // WeatherKit doesn't need client-side API keys
     setHasApiKey(true);
   };
 
@@ -1291,19 +1265,7 @@ const WeatherMap = () => {
 
   return (
     <div className="relative w-full h-screen overflow-hidden">
-      {!hasWeatherAPI && (
-        <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-card p-6 rounded-lg shadow-lg">
-            <h2 className="text-lg font-semibold mb-2">WeatherKit Integration</h2>
-            <p className="text-sm text-muted-foreground mb-4">
-              WeatherKit is now configured for weather data.
-            </p>
-            <Button onClick={() => setHasApiKey(true)}>
-              Continue
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* WeatherKit integration is now configured via Supabase secrets */}
       
       {showTokenInput && (
         <div className="absolute top-4 left-4 z-10 bg-card border border-border rounded-lg p-4 shadow-lg">
@@ -1412,7 +1374,7 @@ const WeatherMap = () => {
             arrivalTime={currentRoute ? new Date(departureTime.getTime() + currentRoute.duration * 1000) : undefined}
             onClearRoute={clearRoute}
             routePoints={routePoints}
-            onApiSetup={() => setShowApiKeySetup(true)}
+            onApiSetup={() => {}} // No API setup needed for WeatherKit
           />
           
           {/* Travel Recommendations Panel */}

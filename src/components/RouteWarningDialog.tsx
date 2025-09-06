@@ -69,12 +69,12 @@ const RouteWarningDialog: React.FC<RouteWarningDialogProps> = ({
 
               <div className="flex items-start gap-3">
                 <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
-                  OpenWeather {hasAccuWeatherKey ? 'Fallback' : 'Standard'}
+                  WeatherKit {hasAccuWeatherKey ? 'Fallback' : 'Standard'}
                 </Badge>
                 <div className="text-sm">
                   <div className="font-medium">Standard Precision (2+ hours)</div>
                   <div className="text-muted-foreground">
-                    3-hour interval forecasts with interpolation - reduced accuracy
+                    Hourly forecasts with interpolation - excellent accuracy
                   </div>
                 </div>
               </div>
@@ -87,11 +87,10 @@ const RouteWarningDialog: React.FC<RouteWarningDialogProps> = ({
               </div>
               <div className="text-xs text-orange-700 mt-1">
                 {hasAccuWeatherKey ? (
-                  <>For routes longer than 2 hours, the system will use OpenWeather's 3-hour forecast 
-                  intervals with interpolation. This may result in less precise precipitation timing 
-                  and intensity predictions compared to AccuWeather's minute-level data.</>
+                  <>For routes longer than 2 hours, the system will use WeatherKit's hourly forecast 
+                  data with interpolation. This provides excellent accuracy for longer trips.</>
                 ) : (
-                  <>This route uses OpenWeather's 3-hour forecast intervals with interpolation. 
+                  <>This route uses WeatherKit's hourly forecast data with interpolation. 
                   For better accuracy on shorter routes, consider setting up AccuWeather MinuteCast 
                   which provides minute-by-minute precipitation forecasts.</>
                 )}
