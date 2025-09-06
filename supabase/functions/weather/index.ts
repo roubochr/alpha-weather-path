@@ -5,9 +5,10 @@ import { create, getNumericDate } from 'https://deno.land/x/djwt@v3.0.1/mod.ts'
 // Helper function to create JWT for WeatherKit authentication
 async function createWeatherKitJWT(): Promise<string> {
   const keyId = Deno.env.get('WEATHERKIT_KEY_ID')
+  const teamId = Deno.env.get('WEATHERKIT_TEAM_ID')
   const privateKey = Deno.env.get('WEATHERKIT_PRIVATE_KEY')
   
-  if (!keyId || !privateKey) {
+  if (!keyId || !teamId || !privateKey) {
     throw new Error('WeatherKit credentials not configured in Supabase secrets')
   }
 
@@ -39,7 +40,7 @@ async function createWeatherKitJWT(): Promise<string> {
   }
 
   const payload = {
-    iss: keyId,
+    iss: teamId,
     iat: getNumericDate(new Date()),
     exp: getNumericDate(new Date(Date.now() + 3600000)), // 1 hour
     sub: 'com.example.weatherkit-client' // Replace with your bundle ID
