@@ -43,11 +43,22 @@ export const useWeatherKit = () => {
     setError(null);
 
     try {
-      // WeatherKit requires authentication with Apple Developer credentials
-      // For now, we'll use a mock implementation that can be replaced with actual WeatherKit calls
-      const mockWeatherData = generateMockWeatherData(lat, lon);
+      // Use Supabase Edge Function for weather data
+      const response = await fetch('/api/weather', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ lat, lon })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch weather data from API');
+      }
+
+      const weatherData = await response.json();
       setLoading(false);
-      return mockWeatherData;
+      return weatherData;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch weather data from WeatherKit';
       setError(errorMessage);
