@@ -7,46 +7,81 @@ async function createWeatherKitJWT(): Promise<string> {
   const keyId = Deno.env.get('WEATHERKIT_KEY_ID')
   const teamId = Deno.env.get('WEATHERKIT_TEAM_ID')
   const privateKey = Deno.env.get('WEATHERKIT_PRIVATE_KEY')
+  const serviceId = Deno.env.get('WEATHERKIT_SERVICE_ID')
   
-  if (!keyId || !teamId || !privateKey) {
-    throw new Error('WeatherKit credentials not configured in Supabase secrets')
-  }
-
-  // Clean up the private key format
-  const cleanPrivateKey = privateKey
-    .replace(/\\n/g, '\n')
-    .replace(/-----BEGIN PRIVATE KEY-----\n?/, '')
-    .replace(/\n?-----END PRIVATE KEY-----/, '')
-    .trim()
-
-  const pemKey = `-----BEGIN PRIVATE KEY-----\n${cleanPrivateKey}\n-----END PRIVATE KEY-----`
-
-  // Create key from PEM string
-  const keyData = new TextEncoder().encode(pemKey)
+  console.log('WeatherKit JWT: Starting JWT creation process')
+  console.log('WeatherKit JWT: Key ID exists:', !!keyId)
+  console.log('WeatherKit JWT: Team ID exists:', !!teamId)
+  console.log('WeatherKit JWT: Private key exists:', !!privateKey)
+  console.log('WeatherKit JWT: Service ID exists:', !!serviceId)
   
-  // Import the private key for ES256 signing
-  const cryptoKey = await crypto.subtle.importKey(
-    'pkcs8',
-    keyData,
-    { name: 'ECDSA', namedCurve: 'P-256' },
-    false,
-    ['sign']
-  )
-
-  const header = {
-    alg: 'ES256',
-    kid: keyId,
-    typ: 'JWT'
+  if (!keyId || !teamId || !privateKey || !serviceId) {
+    const missing = []
+    if (!keyId) missing.push('WEATHERKIT_KEY_ID')
+    if (!teamId) missing.push('WEATHERKIT_TEAM_ID')
+    if (!privateKey) missing.push('WEATHERKIT_PRIVATE_KEY')
+    if (!serviceId) missing.push('WEATHERKIT_SERVICE_ID')
+    throw new Error(`WeatherKit credentials missing: ${missing.join(', ')}`)
   }
 
-  const payload = {
-    iss: teamId,
-    iat: getNumericDate(new Date()),
-    exp: getNumericDate(new Date(Date.now() + 3600000)), // 1 hour
-    sub: 'com.example.weatherkit-client' // Replace with your bundle ID
-  }
+  try {
+    // Handle P8 key format - Apple provides keys in P8 format, not PEM
+    let processedKey = privateKey.trim()
+    
+    // Remove any PEM headers if present and clean up
+    processedKey = processedKey
+      .replace(/\\n/g, '\n')
+      .replace(/-----BEGIN PRIVATE KEY-----\n?/, '')
+      .replace(/\n?-----END PRIVATE KEY-----/, '')
+      .replace(/-----BEGIN EC PRIVATE KEY-----\n?/, '')
+      .replace(/\n?-----END EC PRIVATE KEY-----/, '')
+      .trim()
 
-  return await create(header, payload, cryptoKey)
+    // Convert to proper PEM format for Web Crypto API
+    const pemKey = `-----BEGIN PRIVATE KEY-----\n${processedKey}\n-----END PRIVATE KEY-----`
+    console.log('WeatherKit JWT: Private key formatted for import')
+
+    // Decode base64 to binary
+    const binaryKey = Uint8Array.from(atob(processedKey.replace(/\s/g, '')), c => c.charCodeAt(0))
+    
+    // Import the private key for ES256 signing
+    const cryptoKey = await crypto.subtle.importKey(
+      'pkcs8',
+      binaryKey,
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      false,
+      ['sign']
+    )
+    console.log('WeatherKit JWT: Private key imported successfully')
+
+    const now = Math.floor(Date.now() / 1000)
+    
+    const header = {
+      alg: 'ES256',
+      kid: keyId,
+      typ: 'JWT'
+    }
+
+    const payload = {
+      iss: teamId,
+      iat: now,
+      exp: now + 3600, // 1 hour from now
+      sub: serviceId // Use the WeatherKit Service ID
+    }
+
+    console.log('WeatherKit JWT: Creating JWT with header:', { ...header, kid: '[REDACTED]' })
+    console.log('WeatherKit JWT: Creating JWT with payload:', { ...payload, iss: '[REDACTED]', sub: '[REDACTED]' })
+
+    const token = await create(header, payload, cryptoKey)
+    console.log('WeatherKit JWT: JWT created successfully, length:', token.length)
+    
+    return token
+  } catch (error) {
+    console.error('WeatherKit JWT: Error creating JWT token:', error)
+    console.error('WeatherKit JWT: Error details:', error.message)
+    console.error('WeatherKit JWT: Error stack:', error.stack)
+    throw new Error(`Failed to create WeatherKit JWT: ${error.message}`)
+  }
 }
 
 serve(async (req) => {
