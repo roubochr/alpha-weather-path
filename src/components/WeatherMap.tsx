@@ -746,6 +746,20 @@ const WeatherMap = () => {
           const minOpacity = 0.1; // Minimum 10% opacity
           dynamicOpacity = Math.max(dynamicOpacity, minOpacity);
 
+          // Add precipitation source if it doesn't exist
+          if (!map.current.getSource('precipitation-tiles')) {
+            console.log('Adding precipitation tiles source');
+            map.current.addSource('precipitation-tiles', {
+              type: 'raster',
+              tiles: [
+                // Note: Using placeholder tiles - WeatherKit radar tiles require server-side authentication
+                // In production, replace with authenticated WeatherKit radar tiles via proxy
+                'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' // Transparent 1x1 pixel
+              ],
+              tileSize: 256
+            });
+          }
+
           // Enhanced visual effects for more vibrant precipitation
           const paintProperties: any = {
             'raster-opacity': dynamicOpacity,
@@ -753,29 +767,29 @@ const WeatherMap = () => {
             'raster-fade-duration': 300
           };
 
-                     // Apply enhanced visual effects based on intensity and over-saturation
-           if (isOverSaturated) {
-             // Over-saturation mode: maximum vibrancy within 1.0 limits
-             paintProperties['raster-brightness-min'] = 0.2; // Higher min for more dramatic effect
-             paintProperties['raster-brightness-max'] = 1.0;
-             paintProperties['raster-contrast'] = 1.0; // Maximum allowed contrast
-             paintProperties['raster-saturation'] = 1.0; // Maximum allowed saturation
-             paintProperties['raster-hue-rotate'] = 0; // Ensure blue tones
-           } else if (intensityMultiplier > 0.5) {
-             // High intensity mode: enhanced vibrancy within limits
-             paintProperties['raster-brightness-min'] = 0.15; // Higher min for more pop
-             paintProperties['raster-brightness-max'] = 1.0;
-             paintProperties['raster-contrast'] = 0.9; // High contrast within limits
-             paintProperties['raster-saturation'] = 0.9; // High saturation within limits
-             paintProperties['raster-hue-rotate'] = 0; // Ensure blue tones
-           } else {
-             // Normal mode: moderate enhancement within limits
-             paintProperties['raster-brightness-min'] = 0.1; // Higher min
-             paintProperties['raster-brightness-max'] = 1.0;
-             paintProperties['raster-contrast'] = 0.7; // Moderate contrast within limits
-             paintProperties['raster-saturation'] = 0.8; // Moderate saturation within limits
-             paintProperties['raster-hue-rotate'] = 0; // Ensure blue tones
-           }
+          // Apply enhanced visual effects based on intensity and over-saturation
+          if (isOverSaturated) {
+            // Over-saturation mode: maximum vibrancy within 1.0 limits
+            paintProperties['raster-brightness-min'] = 0.2; // Higher min for more dramatic effect
+            paintProperties['raster-brightness-max'] = 1.0;
+            paintProperties['raster-contrast'] = 1.0; // Maximum allowed contrast
+            paintProperties['raster-saturation'] = 1.0; // Maximum allowed saturation
+            paintProperties['raster-hue-rotate'] = 0; // Ensure blue tones
+          } else if (intensityMultiplier > 0.5) {
+            // High intensity mode: enhanced vibrancy within limits
+            paintProperties['raster-brightness-min'] = 0.15; // Higher min for more pop
+            paintProperties['raster-brightness-max'] = 1.0;
+            paintProperties['raster-contrast'] = 0.9; // High contrast within limits
+            paintProperties['raster-saturation'] = 0.9; // High saturation within limits
+            paintProperties['raster-hue-rotate'] = 0; // Ensure blue tones
+          } else {
+            // Normal mode: moderate enhancement within limits
+            paintProperties['raster-brightness-min'] = 0.1; // Higher min
+            paintProperties['raster-brightness-max'] = 1.0;
+            paintProperties['raster-contrast'] = 0.7; // Moderate contrast within limits
+            paintProperties['raster-saturation'] = 0.8; // Moderate saturation within limits
+            paintProperties['raster-hue-rotate'] = 0; // Ensure blue tones
+          }
 
           map.current.addLayer({
             id: 'weather-precipitation',
@@ -791,8 +805,20 @@ const WeatherMap = () => {
         // Add clouds layer if enabled (WeatherKit integration needed)
         if (clouds) {
           console.log('Clouds overlay disabled - WeatherKit integration pending');
-          // WeatherKit cloud tiles would be configured here
-          // For now, clouds overlay is disabled pending WeatherKit tile integration
+          
+          // Add clouds source if it doesn't exist
+          if (!map.current.getSource('cloud-tiles')) {
+            console.log('Adding cloud tiles source');
+            map.current.addSource('cloud-tiles', {
+              type: 'raster',
+              tiles: [
+                // Note: Using placeholder tiles - WeatherKit cloud tiles require server-side authentication
+                // In production, replace with authenticated WeatherKit cloud tiles via proxy
+                'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7' // Transparent 1x1 pixel
+              ],
+              tileSize: 256
+            });
+          }
 
           map.current.addLayer({
             id: 'weather-clouds',
