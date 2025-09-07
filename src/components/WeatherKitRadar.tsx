@@ -22,7 +22,7 @@ const WeatherKitRadar: React.FC<WeatherKitRadarProps> = ({
   const timeOffsetRef = useRef(0);
 
   const removeAllLayers = useCallback(() => {
-    if (!map) return;
+    if (!map || !map.isStyleLoaded()) return;
 
     const layersToRemove = [
       'weatherkit-precipitation',
@@ -30,8 +30,12 @@ const WeatherKitRadar: React.FC<WeatherKitRadarProps> = ({
     ];
 
     layersToRemove.forEach(layerId => {
-      if (map.getLayer(layerId)) {
-        map.removeLayer(layerId);
+      try {
+        if (map.getLayer(layerId)) {
+          map.removeLayer(layerId);
+        }
+      } catch (error) {
+        console.warn(`Failed to remove layer ${layerId}:`, error);
       }
     });
 
@@ -41,8 +45,12 @@ const WeatherKitRadar: React.FC<WeatherKitRadarProps> = ({
     ];
 
     sourcesToRemove.forEach(sourceId => {
-      if (map.getSource(sourceId)) {
-        map.removeSource(sourceId);
+      try {
+        if (map.getSource(sourceId)) {
+          map.removeSource(sourceId);
+        }
+      } catch (error) {
+        console.warn(`Failed to remove source ${sourceId}:`, error);
       }
     });
   }, [map]);
@@ -106,9 +114,13 @@ const WeatherKitRadar: React.FC<WeatherKitRadarProps> = ({
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      removeAllLayers();
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
+      try {
+        removeAllLayers();
+        if (animationRef.current) {
+          cancelAnimationFrame(animationRef.current);
+        }
+      } catch (error) {
+        console.warn('Error during WeatherKitRadar cleanup:', error);
       }
     };
   }, [removeAllLayers]);
