@@ -57,7 +57,7 @@ export const useWeatherKit = () => {
       }
       
       console.log('Calling weather function...');
-      const { data, error } = await supabase.functions.invoke('weather', {
+      const { data, error } = await supabase.functions.invoke('WeatherKit', {
         body: { lat, lon }
       });
 
