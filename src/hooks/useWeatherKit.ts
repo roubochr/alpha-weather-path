@@ -47,7 +47,7 @@ export const useWeatherKit = () => {
       console.log('Calling Supabase weather function with coordinates:', lat, lon);
       const { supabase } = await import('@/integrations/supabase/client');
       
-      const { data, error } = await supabase.functions.invoke('weather', {
+      const { data, error } = await supabase.functions.invoke('WeatherKit', {
         body: { lat, lon }
       });
 
