@@ -29,7 +29,7 @@ const RouteWarningDialog: React.FC<RouteWarningDialogProps> = ({
     return `${hours}h ${minutes}m`;
   };
 
-  const hasAccuWeatherKey = localStorage.getItem('accuweather-api-key');
+  
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -53,47 +53,27 @@ const RouteWarningDialog: React.FC<RouteWarningDialogProps> = ({
             </div>
 
             <div className="space-y-3">
-              {hasAccuWeatherKey && (
-                <div className="flex items-start gap-3">
-                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                    AccuWeather MinuteCast
-                  </Badge>
-                  <div className="text-sm">
-                    <div className="font-medium">High Precision (0-2 hours)</div>
-                    <div className="text-muted-foreground">
-                      Minute-by-minute precipitation forecasts with high accuracy
-                    </div>
-                  </div>
-                </div>
-              )}
-
               <div className="flex items-start gap-3">
-                <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
-                  WeatherKit {hasAccuWeatherKey ? 'Fallback' : 'Standard'}
+                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                  WeatherKit
                 </Badge>
                 <div className="text-sm">
-                  <div className="font-medium">Standard Precision (2+ hours)</div>
+                  <div className="font-medium">Weather Forecast Data</div>
                   <div className="text-muted-foreground">
-                    Hourly forecasts with interpolation - excellent accuracy
+                    Hourly forecasts with interpolation for route planning
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
-              <div className="flex items-center gap-2 text-orange-800 font-medium text-sm">
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center gap-2 text-blue-800 font-medium text-sm">
                 <CloudRain className="h-4 w-4" />
-                Weather Accuracy Notice
+                Weather Information
               </div>
-              <div className="text-xs text-orange-700 mt-1">
-                {hasAccuWeatherKey ? (
-                  <>For routes longer than 2 hours, the system will use WeatherKit's hourly forecast 
-                  data with interpolation. This provides excellent accuracy for longer trips.</>
-                ) : (
-                  <>This route uses WeatherKit's hourly forecast data with interpolation. 
-                  For better accuracy on shorter routes, consider setting up AccuWeather MinuteCast 
-                  which provides minute-by-minute precipitation forecasts.</>
-                )}
+              <div className="text-xs text-blue-700 mt-1">
+                This route uses WeatherKit's hourly forecast data with interpolation 
+                to provide weather conditions along your journey.
               </div>
             </div>
           </DialogDescription>
@@ -104,7 +84,7 @@ const RouteWarningDialog: React.FC<RouteWarningDialogProps> = ({
             Cancel
           </Button>
           <Button onClick={onContinue} className="flex-1">
-            {hasAccuWeatherKey ? 'Continue with Reduced Accuracy' : 'Continue with Standard Accuracy'}
+            Continue with Weather Data
           </Button>
         </div>
       </DialogContent>

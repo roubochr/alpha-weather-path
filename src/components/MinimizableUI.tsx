@@ -256,12 +256,11 @@ const MinimizableUI: React.FC<MinimizableUIProps> = ({
                   <div className="flex items-center gap-2">
                     <Check className="w-4 h-4 text-green-500" />
                     <div>
-                      <div className="text-sm font-medium">AccuWeather MinuteCast</div>
-                      <div className="text-xs text-muted-foreground">Enabled for sub-2-hour trips</div>
+                      <div className="text-sm font-medium">WeatherKit Integration</div>
+                      <div className="text-xs text-muted-foreground">Configure via Settings for weather data</div>
                     </div>
                   </div>
                 </div>
-                {/* WeatherKit is now configured manually */}
               </div>
             </div>
           )}
