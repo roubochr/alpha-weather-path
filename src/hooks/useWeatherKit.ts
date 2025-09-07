@@ -45,13 +45,18 @@ export const useWeatherKit = () => {
     try {
       // Use manual Supabase configuration for weather data
       console.log('Calling Supabase weather function with coordinates:', lat, lon);
-      const { getSupabaseClient } = await import('@/utils/supabaseClient');
-      const supabase = getSupabaseClient();
+      const { getSupabaseClient, isSupabaseConfigured } = await import('@/utils/supabaseClient');
       
-      if (!supabase) {
+      if (!isSupabaseConfigured()) {
         throw new Error('Supabase not configured. Please configure your Supabase URL and Anon Key in settings.');
       }
       
+      const supabase = getSupabaseClient();
+      if (!supabase) {
+        throw new Error('Failed to create Supabase client. Please check your configuration.');
+      }
+      
+      console.log('Calling weather function...');
       const { data, error } = await supabase.functions.invoke('weather', {
         body: { lat, lon }
       });
@@ -59,13 +64,25 @@ export const useWeatherKit = () => {
       console.log('Supabase function response:', { data, error });
 
       if (error) {
+        console.error('Supabase function error:', error);
+        if (error.message?.includes('CORS') || error.message?.includes('preflight')) {
+          throw new Error('CORS error: Please check that your Supabase Edge Function is deployed and accessible.');
+        }
+        if (error.message?.includes('Failed to fetch') || error.message?.includes('FunctionsFetchError')) {
+          throw new Error('Unable to connect to weather service. Please check your Supabase configuration and ensure the Edge Function is deployed.');
+        }
         throw new Error(error.message || 'Failed to fetch weather data');
+      }
+
+      if (!data) {
+        throw new Error('No weather data received from service');
       }
 
       setLoading(false);
       return data;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to fetch weather data from WeatherKit';
+      console.error('Weather fetch error:', errorMessage);
       setError(errorMessage);
       setLoading(false);
       return null;
