@@ -56,9 +56,11 @@ serve(async (req) => {
 
   try {
     const { lat, lon } = await req.json()
+    console.log('WeatherKit API: Request received for coordinates:', { lat, lon })
     
     // Create JWT token for WeatherKit authentication
     const token = await createWeatherKitJWT()
+    console.log('WeatherKit API: JWT token created successfully')
     
     const headers = {
       'Authorization': `Bearer ${token}`,
@@ -66,18 +68,24 @@ serve(async (req) => {
     }
 
     // Get current weather from WeatherKit
-    const weatherResponse = await fetch(
-      `https://weatherkit.apple.com/api/v1/weather/en/${lat}/${lon}?dataSets=currentWeather,forecastHourly&timezone=UTC`,
-      { headers }
-    )
+    const weatherUrl = `https://weatherkit.apple.com/api/v1/weather/en/${lat}/${lon}?dataSets=currentWeather,forecastHourly&timezone=UTC`
+    console.log('WeatherKit API: Making request to:', weatherUrl)
+    console.log('WeatherKit API: Using headers:', { 'Authorization': 'Bearer [REDACTED]', 'Content-Type': 'application/json' })
+    
+    const weatherResponse = await fetch(weatherUrl, { headers })
+    
+    console.log('WeatherKit API: Response status:', weatherResponse.status)
+    console.log('WeatherKit API: Response headers:', Object.fromEntries(weatherResponse.headers.entries()))
     
     if (!weatherResponse.ok) {
       const errorText = await weatherResponse.text()
       console.error('WeatherKit API error:', weatherResponse.status, errorText)
+      console.error('WeatherKit API: Full error response:', errorText)
       throw new Error(`WeatherKit API error: ${weatherResponse.status} - ${errorText}`)
     }
     
     const weatherData = await weatherResponse.json()
+    console.log('WeatherKit API: Raw response data:', JSON.stringify(weatherData, null, 2))
     
     const result = {
       current: {
@@ -102,6 +110,8 @@ serve(async (req) => {
       }))
     }
 
+    console.log('WeatherKit API: Processed result:', JSON.stringify(result, null, 2))
+    
     return new Response(
       JSON.stringify(result),
       { 
@@ -112,8 +122,14 @@ serve(async (req) => {
       }
     )
   } catch (error) {
+    console.error('WeatherKit API: Error in weather function:', error)
+    console.error('WeatherKit API: Error stack:', error.stack)
+    
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: error.message,
+        details: 'Check Supabase function logs for more information'
+      }),
       { 
         status: 500, 
         headers: { 

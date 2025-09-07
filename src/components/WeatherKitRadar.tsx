@@ -64,35 +64,11 @@ const WeatherKitRadar: React.FC<WeatherKitRadarProps> = ({
       dynamicOpacity = Math.min(0.9, Math.max(0.2, opacity * (1 + avgPrecipitation / 10)));
     }
 
-    // Mock radar source - using OpenWeatherMap for demonstration
-    // Note: WeatherKit radar tiles require server-side authentication and can't be accessed directly from frontend
-    const radarSource = {
-      type: 'raster' as const,
-      tiles: [
-        // Using a mock/placeholder radar tile service for demonstration
-        // In production, this would use authenticated WeatherKit tiles via a proxy
-        `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=demo`
-      ],
-      tileSize: 256
-    };
-
-    try {
-      map.addSource(sourceId, radarSource);
-
-      map.addLayer({
-        id: layerId,
-        type: 'raster',
-        source: sourceId,
-        paint: {
-          'raster-opacity': dynamicOpacity,
-          'raster-fade-duration': 300
-        }
-      });
-
-      console.log(`WeatherKit precipitation layer updated: opacity=${dynamicOpacity.toFixed(2)}, hour=${currentHour}`);
-    } catch (error) {
-      console.error('Error adding WeatherKit precipitation layer:', error);
-    }
+    console.log('WeatherKitRadar: Radar functionality disabled - requires server-side WeatherKit radar implementation');
+    
+    // Note: WeatherKit radar tiles require server-side authentication and cannot be accessed from frontend
+    // This component is disabled until proper WeatherKit radar proxy is implemented
+    return;
   }, [map, isVisible, isAnimating, currentHour, opacity, weatherData, removeAllLayers]);
 
   // Handle animation
