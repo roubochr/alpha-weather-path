@@ -58,7 +58,10 @@ export const useWeatherKit = () => {
       
       console.log('Calling weather function...');
       const { data, error } = await supabase.functions.invoke('WeatherKit', {
-        body: { lat, lon }
+        body: JSON.stringify({ lat, lon }),
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
 
       console.log('Supabase function response:', { data, error });
