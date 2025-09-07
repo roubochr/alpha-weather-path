@@ -43,11 +43,16 @@ export const useWeatherKit = () => {
     setError(null);
 
     try {
-      // Use Supabase Edge Function for weather data
+      // Use manual Supabase configuration for weather data
       console.log('Calling Supabase weather function with coordinates:', lat, lon);
-      const { supabase } = await import('@/integrations/supabase/client');
+      const { getSupabaseClient } = await import('@/utils/supabaseClient');
+      const supabase = getSupabaseClient();
       
-      const { data, error } = await supabase.functions.invoke('WeatherKit', {
+      if (!supabase) {
+        throw new Error('Supabase not configured. Please configure your Supabase URL and Anon Key in settings.');
+      }
+      
+      const { data, error } = await supabase.functions.invoke('weather', {
         body: { lat, lon }
       });
 
@@ -73,7 +78,12 @@ export const useWeatherKit = () => {
     setError(null);
 
     try {
-      const { supabase } = await import('@/integrations/supabase/client');
+      const { getSupabaseClient } = await import('@/utils/supabaseClient');
+      const supabase = getSupabaseClient();
+      
+      if (!supabase) {
+        throw new Error('Supabase not configured. Please configure your Supabase URL and Anon Key in settings.');
+      }
       
       const weatherData = await getWeatherData(lat, lon);
       if (!weatherData) return null;

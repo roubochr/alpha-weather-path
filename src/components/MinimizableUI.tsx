@@ -261,7 +261,7 @@ const MinimizableUI: React.FC<MinimizableUIProps> = ({
                     </div>
                   </div>
                 </div>
-                {/* WeatherKit is now configured via Supabase secrets */}
+                {/* WeatherKit is now configured manually */}
               </div>
             </div>
           )}

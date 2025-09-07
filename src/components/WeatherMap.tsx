@@ -4,7 +4,7 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Cloud, CloudRain, Sun, AlertTriangle, MapPin, Wind, Droplets, Eye, Thermometer, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Cloud, CloudRain, Sun, AlertTriangle, MapPin, Wind, Droplets, Eye, Thermometer, ChevronLeft, ChevronRight, Settings } from 'lucide-react';
 import AddressSearch from '@/components/AddressSearch';
 import { useRouting, RouteData } from '@/hooks/useRouting';
 import { useWeatherKit, TimeBasedWeatherData } from '@/hooks/useWeatherKit';
@@ -22,6 +22,8 @@ import TravelRecommendations from '@/components/TravelRecommendations';
 import { useTravelRecommendations, TravelRecommendation } from '@/hooks/useTravelRecommendations';
 import { Toaster } from '@/components/ui/toaster';
 import { toast } from '@/hooks/use-toast';
+import { useNavigate } from 'react-router-dom';
+import { isSupabaseConfigured } from '@/utils/supabaseClient';
 
 // Define types for our route and weather system
 interface RoutePoint {
@@ -42,6 +44,8 @@ interface WeatherData {
 
 const WeatherMap = () => {
   console.log('WeatherMap component rendering...');
+  
+  const navigate = useNavigate();
   
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
@@ -640,7 +644,7 @@ const WeatherMap = () => {
       setShowTokenInput(false);
     }
     
-    setHasApiKey(true); // WeatherKit is configured via Supabase secrets
+    setHasApiKey(true); // WeatherKit is configured manually
     setMapboxToken(mapboxToken);
     
     // Only show token input if no token exists
@@ -1291,7 +1295,7 @@ const WeatherMap = () => {
 
   return (
     <div className="relative w-full h-screen overflow-hidden">
-      {/* WeatherKit integration is now configured via Supabase secrets */}
+      {/* WeatherKit integration is now configured manually */}
       
       {showTokenInput && (
         <div className="absolute top-4 left-4 z-10 bg-card border border-border rounded-lg p-4 shadow-lg">
@@ -1456,6 +1460,40 @@ const WeatherMap = () => {
             >
               <MapPin className="w-4 h-4" />
             </Button>
+          </div>
+          
+          {/* Settings and Configuration */}
+          <div className="absolute top-4 right-4 z-10 space-y-2">
+            <Button
+              onClick={() => navigate('/settings')}
+              size="sm"
+              variant="outline"
+              className="bg-card/95 backdrop-blur-sm border-border hover:bg-accent"
+              title="Settings"
+            >
+              <Settings className="w-4 h-4" />
+            </Button>
+            
+            {/* Supabase Configuration Status */}
+            {!isSupabaseConfigured() && (
+              <Card className="bg-yellow-50 border-yellow-200 p-3">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-yellow-600" />
+                  <div className="text-sm">
+                    <div className="font-medium text-yellow-800">Configuration Required</div>
+                    <div className="text-yellow-700">Supabase credentials needed for weather data</div>
+                    <Button
+                      size="sm"
+                      variant="link"
+                      className="h-auto p-0 text-yellow-800 underline"
+                      onClick={() => navigate('/settings')}
+                    >
+                      Configure now
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            )}
           </div>
           
           <div className="absolute bottom-4 right-4 z-10">
