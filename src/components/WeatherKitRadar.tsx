@@ -64,12 +64,14 @@ const WeatherKitRadar: React.FC<WeatherKitRadarProps> = ({
       dynamicOpacity = Math.min(0.9, Math.max(0.2, opacity * (1 + avgPrecipitation / 10)));
     }
 
-    // Mock WeatherKit radar source (replace with actual WeatherKit radar tiles)
+    // Mock radar source - using OpenWeatherMap for demonstration
+    // Note: WeatherKit radar tiles require server-side authentication and can't be accessed directly from frontend
     const radarSource = {
       type: 'raster' as const,
       tiles: [
-        // WeatherKit radar tile URLs would be configured here
-        `https://weatherkit.apple.com/api/v1/radar/{z}/{x}/{y}?date=${Math.floor(Date.now() / 1000) + (currentHour * 3600)}`
+        // Using a mock/placeholder radar tile service for demonstration
+        // In production, this would use authenticated WeatherKit tiles via a proxy
+        `https://tile.openweathermap.org/map/precipitation_new/{z}/{x}/{y}.png?appid=demo`
       ],
       tileSize: 256
     };
